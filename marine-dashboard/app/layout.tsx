@@ -1,5 +1,6 @@
-import "./globals.css"
-
+// app/layout.tsx
+import "./globals.css";
+import ServiceWorkerRegistration from "../component/ServiceWorkerRegistration";
 export default function RootLayout({
   children,
 }: {
@@ -12,6 +13,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
