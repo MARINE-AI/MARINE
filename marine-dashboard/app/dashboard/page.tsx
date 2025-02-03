@@ -31,7 +31,7 @@ const DashboardContent = () => {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-[#001F29] to-[#003543]">
+    <div className="flex bg-black min-h-screen">
       <Sidebar />
 
       <main
@@ -42,27 +42,24 @@ const DashboardContent = () => {
           <section className="content-box">
             <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
               <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                Secure Upload Protocol
+                Uploading Data and Description
               </h2>
               <div className="space-y-6">
                 <div className="flex items-start space-x-6">
                   <div className="w-1/2">
                     <h3 className="text-2xl text-white mb-4">
-                      Military-Grade Encryption
+                      Data
                     </h3>
                     <p className="text-gray-300 leading-relaxed">
-                      All uploads protected with AES-256 encryption during transfer
-                      and at rest. End-to-end security protocol ensures maximum
-                      protection.
+                      Data which is supposed to be secured should be uploaded on the upload file portal
                     </p>
                   </div>
                   <div className="w-1/2">
                     <h3 className="text-2xl text-white mb-4">
-                      Blockchain Anchoring
+                      Description
                     </h3>
                     <p className="text-gray-300 leading-relaxed">
-                      Immediate blockchain notarization on upload completion.
-                      Permanent timestamp proof stored across multiple chains.
+                      Web dorking and crawling depend on your description; the more precise your description, the easier it is for dorks to find relevant sites.
                     </p>
                   </div>
                 </div>
@@ -73,11 +70,11 @@ const DashboardContent = () => {
           <section className="content-box">
             <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
               <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                Advanced Hashing Matrix
+                
               </h2>
               <div className="grid grid-cols-2 gap-8">
                 <div className="space-y-6">
-                  <h3 className="text-2xl text-white">Perceptual Hashing</h3>
+                  <h3 className="text-2xl text-white">Data Analysis</h3>
                   <p className="text-gray-300 leading-relaxed">
                     Multi-layer hash generation combining DCT coefficients and temporal
                     sampling for video content fingerprinting.
@@ -97,7 +94,7 @@ const DashboardContent = () => {
           <section className="content-box">
             <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
               <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                Global Verification Network
+                Data Analysis 
               </h2>
               <div className="flex space-x-8">
                 <div className="w-1/2">
