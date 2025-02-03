@@ -2,73 +2,113 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Home, Upload, Search, Shield, Settings } from 'lucide-react'
-import React from 'react'; // Added import for React
+import { usePathname } from 'next/navigation'
+import React from 'react'
 
-const Sidebar = () => {
-  const [isHovered, setIsHovered] = useState(false)
-  const [windowHeight, setWindowHeight] = useState(0)
+const FloatingDock = () => {
+  const [windowWidth, setWindowWidth] = useState(0)
+  const pathname = usePathname()
 
   useEffect(() => {
-    const handleResize = () => setWindowHeight(window.innerHeight)
+    const handleResize = () => setWindowWidth(window.innerWidth)
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const sidebarHeight = windowHeight * 0.5
-  const topOffset = windowHeight * 0.25
+  // Calculate dock width based on the window width, up to a maximum of 300px.
+  const dockWidth = Math.min(windowWidth - 32, 300)
+
+  const menuItems = [
+    { icon: <Home size={24} />, text: "Dashboard", href: "/" },
+    { icon: <Upload size={24} />, text: "Upload", href: "/dashboard/upload" },
+    { icon: <Search size={24} />, text: "Search", href: "/search" },
+    { icon: <Shield size={24} />, text: "Protect", href: "/protection" },
+    { icon: <Settings size={24} />, text: "Settings", href: "/settings" },
+  ]
 
   return (
     <motion.div
-      className="fixed left-4 rounded-2xl shadow-lg overflow-hidden z-4232"
-      initial={{ opacity: 0.6, width: 64 }}
+      // Center the dock at the bottom of the screen
+      className="fixed bottom-4 left-1/2 transform -translate-x-1/2 rounded-full shadow-lg overflow-hidden z-50"
+      initial={{ opacity: 0, y: 100 }}
       animate={{ 
-        opacity: isHovered ? 1 : 0.6, 
-        width: isHovered ? 256 : 64,
-        height: sidebarHeight,
-        top: topOffset
+        opacity: 1, 
+        y: 0,
+        width: dockWidth,
       }}
-      style={{ 
-        backgroundColor: isHovered ? '#008A90' : 'rgba(0, 138, 144, 0.7)',
-        transition: 'background-color 0.3s ease-in-out'
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
     >
-      <div className="p-4 h-full flex flex-col">
-        <h1 className="text-2xl font-bold mb-8 text-white">
-          {isHovered ? 'Marines' : 'M'}
-        </h1>
-        <nav className="flex-grow">
-          <ul className="space-y-4">
-            <SidebarItem icon={<Home />} text="Dashboard" href="/" />
-            <SidebarItem icon={<Upload />} text="Upload" href="/dashboard/upload" />
-            <SidebarItem icon={<Search />} text="Search" href="/search" />
-            <SidebarItem icon={<Shield />} text="Protect" href="/protection" />
-            <SidebarItem icon={<Settings />} text="Settings" href="/settings" />
-          </ul>
-        </nav>
+      <div 
+        className="p-2 flex justify-center items-center gap-2"
+        style={{ 
+          backgroundColor: 'rgba(0, 138, 144, 0.9)',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        {menuItems.map((item, index) => (
+          <DockItem 
+            key={index}
+            icon={item.icon}
+            text={item.text}
+            href={item.href}
+            isActive={pathname === item.href}
+          />
+        ))}
       </div>
     </motion.div>
   )
 }
 
-const SidebarItem = ({ icon, text, href }: { icon: React.ReactNode; text: string; href: string }) => {
+const DockItem = ({ 
+  icon, 
+  text, 
+  href, 
+  isActive,
+}: { 
+  icon: React.ReactNode; 
+  text: string; 
+  href: string; 
+  isActive: boolean;
+}) => {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
-    <li
+    <Link 
+      href={href} 
+      className="relative group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <Link href={href} className="flex items-center space-x-4 text-white hover:bg-[#006A70] rounded-lg p-2 transition-colors duration-200">
-        {icon}
-        {isHovered && <span>{text}</span>}
-      </Link>
-    </li>
+      <motion.div
+        className={`flex flex-col items-center justify-center mx-auto p-2 rounded-full transition-colors duration-200 ${
+          isActive ? 'bg-[#006A70]' : 'hover:bg-[#006A70]'
+        }`}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <AnimatePresence>
+          {isHovered && (
+            // The label is positioned above the icon using absolute positioning.
+            <motion.span
+              className="text-white text-xs mb-1 absolute top-[-24px] left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-[#006A70] px-2 py-1 rounded-md"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {text}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <span className={`text-white ${isActive ? 'opacity-100' : 'opacity-70'}`}>
+          {icon}
+        </span>
+      </motion.div>
+    </Link>
   )
 }
 
-export default Sidebar
+export default FloatingDock
