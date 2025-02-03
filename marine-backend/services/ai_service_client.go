@@ -49,7 +49,7 @@ func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, e
 	}
 	writer.Close()
 
-	req, err := http.NewRequest("POST", client.AIServiceURL+"/match-video", &b)
+	req, err := http.NewRequest("POST", client.AIServiceURL+"/compare-videos", &b)
 	if err != nil {
 		return result, err
 	}
