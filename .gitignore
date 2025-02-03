@@ -1,6 +1,6 @@
 .env
 env
-__pycache__
+_pycache_
 uploads
 venv
 temp_videos
