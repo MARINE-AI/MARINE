@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from fastapi import APIRouter
 
+
 router = APIRouter()
 
 def scrape_page(url: str):
