@@ -28,7 +28,7 @@ export default function FileUpload() {
       const formData = new FormData()
       formData.append("file", file)
 
-      const response = await fetch("/api/upload", {
+      const response = await fetch("http://localhost:8080/upload", {
         method: "POST",
         body: formData,
       })
@@ -37,7 +37,6 @@ export default function FileUpload() {
 
       const data = await response.json()
 
-      // Send description to /api/desc endpoint
       const descResponse = await fetch("/api/desc", {
         method: "POST",
         headers: {

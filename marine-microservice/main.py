@@ -2,6 +2,8 @@ import os
 import subprocess
 import glob
 import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -13,7 +15,10 @@ from storage.redis_utils import get_phashes, store_phashes
 
 from config import settings
 
-from db import async_session, VideoFingerprint, init_db, engine
+from db import async_session, VideoFingerprint, init_db
+from sqlalchemy import text
+
+from loguru import logger
 
 def cleanup_files(file_list: list):
     for file_path in file_list:
@@ -22,13 +27,19 @@ def cleanup_files(file_list: list):
         except Exception as e:
             print(f"Warning: Failed to remove file {file_path}: {e}")
 
+@asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting up application...")
     await init_db()
     if not os.path.exists(settings.FRAMES_DIR):
         os.makedirs(settings.FRAMES_DIR)
+        logger.info(f"Created frames directory: {settings.FRAMES_DIR}")
     yield
+    logger.info("Shutting down application...")
+    #todo shutdown logic
+    logger.info("Shutdown complete.")
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, title="Video AI Microservice")
 
 @app.post("/upload-reference")
 async def upload_reference_video(video_file: UploadFile = File(...)):
@@ -64,9 +75,9 @@ async def match_video(video_file: UploadFile = File(...)):
         audio_file = "temp_audio.wav"
         extracted_audio = extract_audio(uploaded_video_path, audio_file)
         audio_fingerprint = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
-        
+
         match_results = await active_video_matching(uploaded_phashes, video_file.filename, "full")
-        
+
         reference_phashes = get_phashes(settings.REFERENCE_REDIS_KEY)
         if not reference_phashes:
             raise HTTPException(status_code=400, detail="Reference video hashes not found. Upload a reference video first.")
@@ -153,10 +164,8 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
 async def active_video_matching(new_phashes, new_video_id, new_video_url):
     matches = []
     async with async_session() as session:
-        result = await session.execute(
-            "SELECT video_id, uploaded_phashes FROM video_fingerprints WHERE video_id != :new_id",
-            {"new_id": new_video_id}
-        )
+        stmt = text("SELECT video_id, uploaded_phashes FROM video_fingerprints WHERE video_id != :new_id")
+        result = await session.execute(stmt, {"new_id": new_video_id})
         stored_videos = result.fetchall()
         for row in stored_videos:
             stored_video_id = row[0]
@@ -211,7 +220,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception:
         pass
     cleanup_files(frames)
-    print(f"Automatic match processing for video_id {video_id} complete with match score {round(overall_similarity, 2)}. Active matches: {active_matches}")
+    print(f"Automatic match processing for video_id {video_id} complete with match score {round(overall_similarity,2)}. Active matches: {active_matches}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
