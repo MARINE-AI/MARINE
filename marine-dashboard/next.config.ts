@@ -1,8 +1,3 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
-};
 // next.config.js
 module.exports = {
   async headers() {
@@ -13,14 +8,11 @@ module.exports = {
           {
             key: 'Service-Worker-Allowed',
             value: '/'
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate'
           }
         ]
       }
     ];
-  }
+  },
+  // Add asset prefix if using absolute URLs
+  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://your-domain.com' : '',
 };
-export default nextConfig;
