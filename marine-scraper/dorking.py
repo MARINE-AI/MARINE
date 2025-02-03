@@ -1,23 +1,33 @@
 from playwright.async_api import async_playwright
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import asyncio
 
 router = APIRouter()
 
 async def google_dork(query: str, num_results: int = 5):
     urls = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await page.goto(f"https://www.google.com/search?q={query}")
+    try:
+        async with async_playwright() as p:
+            print("Launching browser...")  # DEBUG
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
 
-        results = await page.query_selector_all("div.tF2Cxc a")
-        for result in results[:num_results]:
-            link = await result.get_attribute("href")
-            if link:
-                urls.append(link)
+            search_url = f"https://www.google.com/search?q={query}"
+            print(f"Navigating to: {search_url}")  # DEBUG
+            await page.goto(search_url)
 
-        await browser.close()
+            results = await page.query_selector_all("div.tF2Cxc a")
+            print(f"Found {len(results)} results")  # DEBUG
+
+            for result in results[:num_results]:
+                link = await result.get_attribute("href")
+                if link:
+                    urls.append(link)
+
+            await browser.close()
+    except Exception as e:
+        print(f"ERROR: {str(e)}")  # DEBUG
+        raise HTTPException(status_code=500, detail=str(e))
     
     return urls
 
