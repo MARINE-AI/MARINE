@@ -24,9 +24,10 @@ func NewAIServiceClient(aiServiceURL string) *AIServiceClient {
 }
 
 type AIResponse struct {
-	MatchScore   float64 `json:"match_score"`
-	ComputedHash string  `json:"computed_hash"`
+	MatchScore   float64                `json:"match_score"`
+	ComputedHash string                 `json:"computed_hash"`
 	Metadata     map[string]interface{} `json:"metadata"`
+	KafkaMessage string                 `json:"kafka_message,omitempty"`
 }
 
 func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, error) {
@@ -47,9 +48,11 @@ func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, e
 	if _, err := io.Copy(part, file); err != nil {
 		return result, err
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return result, err
+	}
 
-	req, err := http.NewRequest("POST", client.AIServiceURL+"/compare-videos", &b)
+	req, err := http.NewRequest("POST", client.AIServiceURL+"/match-video", &b)
 	if err != nil {
 		return result, err
 	}
@@ -61,6 +64,23 @@ func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, e
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		var errMsg map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&errMsg); err != nil {
+			return result, err
+		}
+		return result, &RequestError{StatusCode: resp.StatusCode, Message: errMsg["error"].(string)}
+	}
+
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	return result, err
+}
+
+type RequestError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *RequestError) Error() string {
+	return e.Message
 }
