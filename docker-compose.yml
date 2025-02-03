@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ish
+      POSTGRES_PASSWORD: forzajuve!2
+      POSTGRES_DB: marine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+
+  marine-analysis:
+    build: ./marine-analysis
+    environment:
+      - DATABASE_URL=postgres://ish:forzajuve!2@4.240.103.202:5432/marine
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FRAMES_DIR=frames
+      - SIMILARITY_THRESHOLD=0.8
+      - REFERENCE_REDIS_KEY=ref_phashes
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    ports:
+      - "8000:8000"
+
+  marine-backend:
+    build: ./marine-backend
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+
+  marine-crawler:
+    build: ./marine-crawler
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DATABASE_URL=postgres://ish:forzajuve!2@4.240.103.202:5432/marine
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8001:8001"
+
+  marine-discovery:
+    build: ./marine-discovery
+    environment:
+      - DATABASE_URL=postgres://ish:forzajuve!2@4.240.103.202:5432/marine
+    depends_on:
+      - postgres
+    ports:
+      - "8002:8002"
+
+volumes:
+  postgres_data:
