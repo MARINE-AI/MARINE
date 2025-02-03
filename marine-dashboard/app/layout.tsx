@@ -1,6 +1,6 @@
-// app/layout.tsx
 import "./globals.css";
-import ServiceWorkerRegistration from "../component/ServiceWorkerRegistration";
+import { Orbitron } from "next/font/google"
+const orbitron = Orbitron({ subsets: ["latin"] })
 export default function RootLayout({
   children,
 }: {
@@ -11,9 +11,8 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
-      <body>
+      <body className={orbitron.className}>
         {children}
-        <ServiceWorkerRegistration />
       </body>
     </html>
   );
