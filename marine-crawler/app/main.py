@@ -2,7 +2,7 @@ import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.crawler import run_crawlers
-from app.downloader import video_downloader_worker
+from app.downloader import video_downloader_worker  # Import the worker coroutine directly.
 from app.kafka_client import close_kafka_producer
 from loguru import logger
 import uvicorn
@@ -30,8 +30,9 @@ async def start_crawling():
 
 @app.on_event("startup")
 async def startup_event():
-    loop = asyncio.get_event_loop()
-    loop.create_task(video_downloader_worker())
+    # Instead of calling run_video_downloader() (which uses run_until_complete),
+    # we schedule the video_downloader_worker directly as a background task.
+    asyncio.create_task(video_downloader_worker())
     logger.info("Video downloader worker started")
 
 @app.on_event("shutdown")

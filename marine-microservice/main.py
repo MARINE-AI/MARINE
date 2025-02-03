@@ -9,14 +9,7 @@ import uvicorn
 from fingerprint.video import extract_keyframes, compute_phashes, compute_video_similarity
 from fingerprint.audio import extract_audio, generate_audio_fingerprint
 from storage.redis_utils import get_phashes, store_phashes
-from config import (
-    REFERENCE_VIDEO,
-    REFERENCE_REDIS_KEY,
-    FRAMES_DIR,
-    SIMILARITY_THRESHOLD,
-    KAFKA_BROKER,
-    KAFKA_TOPIC
-)
+from config import settings
 from db import async_session, VideoFingerprint, init_db
 
 app = FastAPI()

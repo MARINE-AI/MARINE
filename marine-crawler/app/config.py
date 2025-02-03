@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     FRAMES_DIR: str = os.getenv("FRAMES_DIR", "frames")
     
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.8"))
-
+    
+    AI_MICROSERVICE_URL: str = os.getenv("AI_MICROSERVICE_URL", "http://localhost:8000")
+    
     class Config:
         env_file = ".env"
 

@@ -1,11 +1,14 @@
-# app/storage/redis_utils.py
-
 import redis
 import json
-from config import REDIS_HOST, REDIS_PORT, REDIS_DB
+from config import settings
 
-# Initialize the Redis client
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+# Initialize the Redis client using values from settings.
+redis_client = redis.Redis(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    db=settings.REDIS_DB,
+    decode_responses=True
+)
 
 def store_phashes(key: str, phashes: list):
     """

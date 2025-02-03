@@ -8,9 +8,10 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.8"))
     KAFKA_BROKER: str = os.getenv("KAFKA_BROKER", "4.240.103.202:9092")
     KAFKA_TOPIC: str = os.getenv("KAFKA_TOPIC", "alerts")
-    REDIS_HOST = os.getenv("REDIS_HOST", "4.240.103.202")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "4.240.103.202")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     class Config:
         env_file = ".env"
