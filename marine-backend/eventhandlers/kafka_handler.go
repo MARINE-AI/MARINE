@@ -18,11 +18,11 @@ type KafkaHandler struct {
 
 func NewKafkaHandler(brokers []string, topic, groupID string, db *pgxpool.Pool) *KafkaHandler {
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   brokers,
-		Topic:     topic,
-		GroupID:   groupID,
-		MinBytes:  10e3, // 10KB
-		MaxBytes:  10e6, // 10MB
+		Brokers:  brokers,
+		Topic:    topic,
+		GroupID:  groupID,
+		MinBytes: 10e3,
+		MaxBytes: 10e6,
 	})
 	return &KafkaHandler{Reader: reader, DB: db}
 }

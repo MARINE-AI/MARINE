@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -25,6 +26,7 @@ func NewAIServiceClient(aiServiceURL string) *AIServiceClient {
 type AIResponse struct {
 	MatchScore   float64 `json:"match_score"`
 	ComputedHash string  `json:"computed_hash"`
+	Metadata     map[string]interface{} `json:"metadata"`
 }
 
 func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, error) {
