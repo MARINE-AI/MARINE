@@ -9,8 +9,19 @@ engine = create_async_engine(DATABASE_URL, echo=True)
 Base = declarative_base()
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-class VideoFingerprint(Base):
-    __tablename__ = "video_fingerprints"
+class UploadedVideo(Base):
+    __tablename__ = "uploaded_videos"
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(String, unique=True, index=True)
+    video_url = Column(String)
+    match_score = Column(Float, nullable=True)
+    uploaded_phashes = Column(JSON)
+    audio_spectrum = Column(JSON, nullable=True)
+    flagged = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+class CrawledVideo(Base):
+    __tablename__ = "crawled_videos"
     id = Column(Integer, primary_key=True, index=True)
     video_id = Column(String, unique=True, index=True)
     video_url = Column(String)

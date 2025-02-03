@@ -12,10 +12,8 @@ from fingerprint.video import extract_keyframes, compute_phashes, compute_video_
 from fingerprint.audio import extract_audio, generate_audio_fingerprint
 
 from storage.redis_utils import get_phashes, store_phashes
-
 from config import settings
-
-from db import async_session, VideoFingerprint, init_db
+from db import async_session, UploadedVideo, CrawledVideo, init_db
 from sqlalchemy import text
 
 from loguru import logger
@@ -25,7 +23,7 @@ def cleanup_files(file_list: list):
         try:
             os.remove(file_path)
         except Exception as e:
-            print(f"Warning: Failed to remove file {file_path}: {e}")
+            logger.warning(f"Failed to remove file {file_path}: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,29 +34,10 @@ async def lifespan(app: FastAPI):
         logger.info(f"Created frames directory: {settings.FRAMES_DIR}")
     yield
     logger.info("Shutting down application...")
-    #todo shutdown logic
+    # Insert any shutdown logic if needed.
     logger.info("Shutdown complete.")
 
 app = FastAPI(lifespan=lifespan, title="Video AI Microservice")
-
-@app.post("/upload-reference")
-async def upload_reference_video(video_file: UploadFile = File(...)):
-    reference_video_path = f"reference_{video_file.filename}"
-    with open(reference_video_path, "wb") as f:
-        f.write(await video_file.read())
-
-    reference_pattern = os.path.join(settings.FRAMES_DIR, "reference_%d.jpg")
-    try:
-        reference_frames = extract_keyframes(reference_video_path, reference_pattern, fps=1)
-        if not reference_frames:
-            return JSONResponse(status_code=400, content={"error": "Failed to extract keyframes from reference video."})
-        reference_phashes = compute_phashes(reference_frames)
-        store_phashes(settings.REFERENCE_REDIS_KEY, reference_phashes)
-    finally:
-        cleanup_files([reference_video_path])
-        cleanup_files(reference_frames)
-    
-    return JSONResponse(content={"message": "Reference video uploaded and processed successfully!"})
 
 @app.post("/match-video")
 async def match_video(video_file: UploadFile = File(...)):
@@ -79,19 +58,21 @@ async def match_video(video_file: UploadFile = File(...)):
         match_results = await active_video_matching(uploaded_phashes, video_file.filename, "full")
 
         reference_phashes = get_phashes(settings.REFERENCE_REDIS_KEY)
-        if not reference_phashes:
-            raise HTTPException(status_code=400, detail="Reference video hashes not found. Upload a reference video first.")
-        overall_similarity = compute_video_similarity(uploaded_phashes, reference_phashes)
+        if reference_phashes:
+            overall_similarity = compute_video_similarity(uploaded_phashes, reference_phashes)
+        else:
+            overall_similarity = 0.0
+
         response = {
             "match_score": round(overall_similarity, 2),
             "active_matches": match_results,
             "metadata": {
                 "uploaded_frames": len(uploaded_phashes),
-                "reference_frames": len(reference_phashes)
+                "reference_frames": len(reference_phashes) if reference_phashes else 0
             }
         }
         async with async_session() as session:
-            vf = VideoFingerprint(
+            record = UploadedVideo(
                 video_id="full_" + video_file.filename,
                 video_url="uploaded",
                 match_score=round(overall_similarity, 2),
@@ -99,7 +80,7 @@ async def match_video(video_file: UploadFile = File(...)):
                 audio_spectrum=audio_fingerprint,
                 flagged=True if match_results else False
             )
-            session.add(vf)
+            session.add(record)
             await session.commit()
     finally:
         cleanup_files([uploaded_video_path])
@@ -133,6 +114,13 @@ async def upload_video_chunk(
     
     return JSONResponse(content={"message": f"Chunk {chunk_index} for video {video_id} uploaded successfully."})
 
+@app.post("/analyze")
+async def analyze(video_id: str = Form(...), total_chunks: int = Form(...)):
+    result = await process_chunks_and_match(video_id, total_chunks)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Processing failed.")
+    return JSONResponse(content=result)
+
 def reassemble_video(video_id: str, total_chunks: int) -> str:
     chunk_dir = os.path.join(CHUNKS_DIR, video_id)
     if not os.path.exists(chunk_dir):
@@ -164,8 +152,8 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
 async def active_video_matching(new_phashes, new_video_id, new_video_url):
     matches = []
     async with async_session() as session:
-        stmt = text("SELECT video_id, uploaded_phashes FROM video_fingerprints WHERE video_id != :new_id")
-        result = await session.execute(stmt, {"new_id": new_video_id})
+        stmt = text("SELECT video_id, uploaded_phashes FROM uploaded_videos WHERE video_id LIKE :prefix")
+        result = await session.execute(stmt, {"prefix": "full_%"})
         stored_videos = result.fetchall()
         for row in stored_videos:
             stored_video_id = row[0]
@@ -174,37 +162,34 @@ async def active_video_matching(new_phashes, new_video_id, new_video_url):
             if similarity >= settings.SIMILARITY_THRESHOLD:
                 matches.append({"stored_video_id": stored_video_id, "similarity": round(similarity, 2)})
     if matches:
-        print(f"Active match for video {new_video_id}: {matches}")
+        logger.info(f"Active match for video {new_video_id}: {matches}")
     return matches
 
 async def process_chunks_and_match(video_id: str, total_chunks: int):
     try:
         reassembled_video = reassemble_video(video_id, total_chunks)
     except Exception as e:
-        print(f"Error during reassembly for video_id {video_id}: {e}")
-        return
+        logger.error(f"Error during reassembly for video_id {video_id}: {e}")
+        return None
 
     output_pattern = os.path.join(settings.FRAMES_DIR, f"{video_id}_%d.jpg")
     frames = extract_keyframes(reassembled_video, output_pattern, fps=1)
     if not frames:
-        print(f"Failed to extract keyframes from reassembled video {video_id}")
-        return
+        logger.error(f"Failed to extract keyframes from reassembled video {video_id}")
+        return None
     
     uploaded_phashes = compute_phashes(frames)
-    # audio_file = "temp_audio.wav"
-    # extracted_audio = extract_audio(reassembled_video, audio_file)
-    # audio_fingerprint = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
     
     reference_phashes = get_phashes(settings.REFERENCE_REDIS_KEY)
     if not reference_phashes:
-        print("Reference video hashes not found. Upload a reference video first.")
-        return
-    
+        logger.error("Not pirated.")
+        return None
+
     overall_similarity = compute_video_similarity(uploaded_phashes, reference_phashes)
     active_matches = await active_video_matching(uploaded_phashes, video_id, "reassembled")
-    
+
     async with async_session() as session:
-        vf = VideoFingerprint(
+        cv = CrawledVideo(
             video_id=video_id,
             video_url="reassembled",
             match_score=round(overall_similarity, 2),
@@ -212,7 +197,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
             audio_spectrum=None,
             flagged=True if active_matches else False
         )
-        session.add(vf)
+        session.add(cv)
         await session.commit()
     
     try:
@@ -220,7 +205,16 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception:
         pass
     cleanup_files(frames)
-    print(f"Automatic match processing for video_id {video_id} complete with match score {round(overall_similarity,2)}. Active matches: {active_matches}")
+    
+    result = {
+        "video_id": video_id,
+        "match_score": round(overall_similarity, 2),
+        "active_matches": active_matches,
+        "uploaded_frames": len(uploaded_phashes),
+        "reference_frames": len(reference_phashes)
+    }
+    logger.info(f"Automatic match processing for video_id {video_id} complete with match score {result['match_score']}. Active matches: {active_matches}")
+    return result
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
