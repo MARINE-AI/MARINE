@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.8"))
     
     AI_MICROSERVICE_URL: str = os.getenv("AI_MICROSERVICE_URL", "http://localhost:8000")
+
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "4.240.103.202")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     
     class Config:
         env_file = ".env"

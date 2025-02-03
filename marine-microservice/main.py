@@ -8,11 +8,12 @@ import uvicorn
 
 from fingerprint.video import extract_keyframes, compute_phashes, compute_video_similarity
 from fingerprint.audio import extract_audio, generate_audio_fingerprint
-from storage.redis_utils import get_phashes, store_phashes
-from config import settings
-from db import async_session, VideoFingerprint, init_db
 
-app = FastAPI()
+from storage.redis_utils import get_phashes, store_phashes
+
+from config import settings
+
+from db import async_session, VideoFingerprint, init_db, engine
 
 def cleanup_files(file_list: list):
     for file_path in file_list:
@@ -21,11 +22,13 @@ def cleanup_files(file_list: list):
         except Exception as e:
             print(f"Warning: Failed to remove file {file_path}: {e}")
 
-@app.on_event("startup")
-async def startup_event():
+async def lifespan(app: FastAPI):
     await init_db()
-    if not os.path.exists(FRAMES_DIR):
-        os.makedirs(FRAMES_DIR)
+    if not os.path.exists(settings.FRAMES_DIR):
+        os.makedirs(settings.FRAMES_DIR)
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/upload-reference")
 async def upload_reference_video(video_file: UploadFile = File(...)):
@@ -33,13 +36,13 @@ async def upload_reference_video(video_file: UploadFile = File(...)):
     with open(reference_video_path, "wb") as f:
         f.write(await video_file.read())
 
-    reference_pattern = os.path.join(FRAMES_DIR, "reference_%d.jpg")
+    reference_pattern = os.path.join(settings.FRAMES_DIR, "reference_%d.jpg")
     try:
         reference_frames = extract_keyframes(reference_video_path, reference_pattern, fps=1)
         if not reference_frames:
             return JSONResponse(status_code=400, content={"error": "Failed to extract keyframes from reference video."})
         reference_phashes = compute_phashes(reference_frames)
-        store_phashes(REFERENCE_REDIS_KEY, reference_phashes)
+        store_phashes(settings.REFERENCE_REDIS_KEY, reference_phashes)
     finally:
         cleanup_files([reference_video_path])
         cleanup_files(reference_frames)
@@ -52,7 +55,7 @@ async def match_video(video_file: UploadFile = File(...)):
     with open(uploaded_video_path, "wb") as f:
         f.write(await video_file.read())
 
-    uploaded_pattern = os.path.join(FRAMES_DIR, f"uploaded_{video_file.filename}_%d.jpg")
+    uploaded_pattern = os.path.join(settings.FRAMES_DIR, f"uploaded_{video_file.filename}_%d.jpg")
     try:
         uploaded_frames = extract_keyframes(uploaded_video_path, uploaded_pattern, fps=1)
         if not uploaded_frames:
@@ -64,7 +67,7 @@ async def match_video(video_file: UploadFile = File(...)):
         
         match_results = await active_video_matching(uploaded_phashes, video_file.filename, "full")
         
-        reference_phashes = get_phashes(REFERENCE_REDIS_KEY)
+        reference_phashes = get_phashes(settings.REFERENCE_REDIS_KEY)
         if not reference_phashes:
             raise HTTPException(status_code=400, detail="Reference video hashes not found. Upload a reference video first.")
         overall_similarity = compute_video_similarity(uploaded_phashes, reference_phashes)
@@ -124,8 +127,10 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
     if not os.path.exists(chunk_dir):
         raise Exception("No chunks found for this video_id.")
     
-    chunk_files = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.mp4")),
-                         key=lambda f: int(os.path.splitext(os.path.basename(f))[0].split('_')[-1]))
+    chunk_files = sorted(
+        glob.glob(os.path.join(chunk_dir, "chunk_*.mp4")),
+        key=lambda f: int(os.path.splitext(os.path.basename(f))[0].split('_')[-1])
+    )
     if len(chunk_files) != total_chunks:
         raise Exception(f"Expected {total_chunks} chunks, but found {len(chunk_files)}.")
     
@@ -148,13 +153,16 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
 async def active_video_matching(new_phashes, new_video_id, new_video_url):
     matches = []
     async with async_session() as session:
-        result = await session.execute("SELECT video_id, uploaded_phashes FROM video_fingerprints WHERE video_id != :new_id", {"new_id": new_video_id})
+        result = await session.execute(
+            "SELECT video_id, uploaded_phashes FROM video_fingerprints WHERE video_id != :new_id",
+            {"new_id": new_video_id}
+        )
         stored_videos = result.fetchall()
         for row in stored_videos:
             stored_video_id = row[0]
             stored_phashes = row[1]
             similarity = compute_video_similarity(new_phashes, stored_phashes)
-            if similarity >= SIMILARITY_THRESHOLD:
+            if similarity >= settings.SIMILARITY_THRESHOLD:
                 matches.append({"stored_video_id": stored_video_id, "similarity": round(similarity, 2)})
     if matches:
         print(f"Active match for video {new_video_id}: {matches}")
@@ -167,7 +175,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
         print(f"Error during reassembly for video_id {video_id}: {e}")
         return
 
-    output_pattern = os.path.join(FRAMES_DIR, f"{video_id}_%d.jpg")
+    output_pattern = os.path.join(settings.FRAMES_DIR, f"{video_id}_%d.jpg")
     frames = extract_keyframes(reassembled_video, output_pattern, fps=1)
     if not frames:
         print(f"Failed to extract keyframes from reassembled video {video_id}")
@@ -178,7 +186,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     # extracted_audio = extract_audio(reassembled_video, audio_file)
     # audio_fingerprint = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
     
-    reference_phashes = get_phashes(REFERENCE_REDIS_KEY)
+    reference_phashes = get_phashes(settings.REFERENCE_REDIS_KEY)
     if not reference_phashes:
         print("Reference video hashes not found. Upload a reference video first.")
         return
@@ -203,7 +211,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception:
         pass
     cleanup_files(frames)
-    print(f"Automatic match processing for video_id {video_id} complete with match score {round(overall_similarity,2)}. Active matches: {active_matches}")
+    print(f"Automatic match processing for video_id {video_id} complete with match score {round(overall_similarity, 2)}. Active matches: {active_matches}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
