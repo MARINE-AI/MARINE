@@ -141,7 +141,7 @@ async def process_video_task(message_value: bytes):
 
             # After all chunks are sent, trigger matching.
             match_data = {"video_id": video_id, "total_chunks": total_chunks}
-            resp = await client.post(f"{settings.AI_MICROSERVICE_URL}/match-video-chunks", data=match_data)
+            resp = await client.post(f"{settings.AI_MICROSERVICE_URL}/analyze", data=match_data)
             logger.info(f"Triggered match processing for video {video_id} (status: {resp.status_code})")
             logger.info(f"Match response: {resp.text}")
 
