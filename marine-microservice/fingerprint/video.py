@@ -1,5 +1,3 @@
-# app/fingerprinting/video.py
-
 import os
 import glob
 import ffmpeg
@@ -8,9 +6,6 @@ import imagehash
 from .common import hamming_similarity
 
 def extract_keyframes(video_path: str, output_pattern: str, fps: int = 1) -> list:
-    """
-    Extracts keyframes from a video using ffmpeg.
-    """
     try:
         (
             ffmpeg
@@ -27,9 +22,6 @@ def extract_keyframes(video_path: str, output_pattern: str, fps: int = 1) -> lis
     return frame_files
 
 def compute_phashes(frame_paths: list) -> list:
-    """
-    Computes the perceptual hash for each frame.
-    """
     hashes = []
     for frame in frame_paths:
         try:
@@ -38,17 +30,17 @@ def compute_phashes(frame_paths: list) -> list:
             hashes.append(ph)
         except Exception as e:
             print(f"Error processing frame {frame}: {e}")
-    return hashes
+    return [str(h) for h in hashes]
 
 def compute_video_similarity(uploaded_hashes: list, reference_hashes: list) -> float:
-    """
-    Computes the overall similarity between uploaded and reference pHashes.
-    """
+    from .common import hamming_similarity
     if not uploaded_hashes or not reference_hashes:
         return 0.0
 
     similarities = []
     for u_hash in uploaded_hashes:
-        max_sim = max(hamming_similarity(u_hash, r_hash) for r_hash in reference_hashes)
+        from PIL import Image
+        u = imagehash.hex_to_hash(u_hash)
+        max_sim = max(hamming_similarity(u, imagehash.hex_to_hash(r_hash)) for r_hash in reference_hashes)
         similarities.append(max_sim)
     return sum(similarities) / len(similarities)
