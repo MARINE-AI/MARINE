@@ -76,7 +76,7 @@ const FloatingTopBar = () => {
           ))}
         </div>
         <Link
-          href="/signin"
+          href="/auth/signin"
           className="bg-white text-[#460000] px-4 py-2 hover:bg-gray-200 transition-colors duration-200"
         >
           Log In

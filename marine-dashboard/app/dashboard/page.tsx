@@ -1,88 +1,143 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
-import Sidebar from "../components/sidebar"
-import { Upload, Database, Shield, Fingerprint } from "lucide-react"
-import type React from "react" // Added import for React
+import { useEffect, useRef, useState } from "react";
+import { motion, useScroll } from "framer-motion";
+import Sidebar from "../components/sidebar";
+import AuthWrapper from "@/app/components/auth-wrapper";
 
-export default function Dashboard() {
-  const [dataAnalysisStatus, setDataAnalysisStatus] = useState<"pending" | "success">("pending")
+const DashboardContent = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ container: containerRef });
+  const [ballPosition, setBallPosition] = useState(0);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDataAnalysisStatus("success")
-    }, 3000)
+    const handleScroll = () => {
+      if (containerRef.current) {
+        const scrollPosition = containerRef.current.scrollTop;
+        setBallPosition(Math.min(scrollPosition / 2, 400));
+      }
+    };
 
-    return () => clearTimeout(timer)
-  }, [])
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex bg-black min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-6 ml-16 flex items-center justify-center">
-        <div className="grid grid-cols-2 gap-8 max-w-6xl w-full">
-          <DashboardBox
-            title="Upload Your Video"
-            icon={<Upload className="w-10 h-10" />}
-            content="Upload your video along with descriptive data. Our advanced algorithms will process and protect your content across the web."
-          />
-          <DashboardBox
-            title="Data Analysis"
-            icon={<Database className="w-10 h-10" />}
-            content="We're currently scraping thousands of sites to analyze and protect your content. Our AI-powered system processes terabytes of data to ensure comprehensive coverage."
-            status={dataAnalysisStatus}
-          />
-          <DashboardBox
-            title="Protection Results"
-            icon={<Shield className="w-10 h-10" />}
-            content="Our system has identified multiple instances of your content being used without authorization. View detailed reports and take action to protect your intellectual property."
-          />
-          <DashboardBox
-            title="Advanced Protection"
-            icon={<Fingerprint className="w-10 h-10" />}
-            content="We use cutting-edge techniques like pHash and video fingerprinting to ensure the highest level of content protection. Your videos are safe with our multi-layered security approach."
-          />
+
+      <main
+        ref={containerRef}
+        className="flex-1 p-8 ml-24 mr-12 relative overflow-y-auto h-screen"
+      >
+        <div className="relative z-30 space-y-48">
+          <section className="content-box">
+            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
+              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
+                Secure Upload Protocol
+              </h2>
+              <div className="space-y-6">
+                <div className="flex items-start space-x-6">
+                  <div className="w-1/2">
+                    <h3 className="text-2xl text-white mb-4">
+                      Military-Grade Encryption
+                    </h3>
+                    <p className="text-gray-300 leading-relaxed">
+                      All uploads protected with AES-256 encryption during transfer
+                      and at rest. End-to-end security protocol ensures maximum
+                      protection.
+                    </p>
+                  </div>
+                  <div className="w-1/2">
+                    <h3 className="text-2xl text-white mb-4">
+                      Blockchain Anchoring
+                    </h3>
+                    <p className="text-gray-300 leading-relaxed">
+                      Immediate blockchain notarization on upload completion.
+                      Permanent timestamp proof stored across multiple chains.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="content-box">
+            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
+              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
+                Advanced Hashing Matrix
+              </h2>
+              <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <h3 className="text-2xl text-white">Perceptual Hashing</h3>
+                  <p className="text-gray-300 leading-relaxed">
+                    Multi-layer hash generation combining DCT coefficients and temporal
+                    sampling for video content fingerprinting.
+                  </p>
+                </div>
+                <div className="space-y-6">
+                  <h3 className="text-2xl text-white">Blockchain Hashing</h3>
+                  <p className="text-gray-300 leading-relaxed">
+                    SHA-3 cryptographic hashing combined with Merkle tree structures for
+                    immutable content verification.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="content-box">
+            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
+              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
+                Global Verification Network
+              </h2>
+              <div className="flex space-x-8">
+                <div className="w-1/2">
+                  <h3 className="text-2xl text-white mb-4">
+                    Distributed Node System
+                  </h3>
+                  <p className="text-gray-300 leading-relaxed">
+                    Worldwide node network for real-time content verification. Geographic
+                    redundancy ensures 100% uptime.
+                  </p>
+                </div>
+                <div className="w-1/2">
+                  <h3 className="text-2xl text-white mb-4">AI Monitoring</h3>
+                  <p className="text-gray-300 leading-relaxed">
+                    Deep learning models constantly scan global networks for content
+                    matches and potential infringements.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
+
+        <div className="fixed left-1/2 top-0 bottom-0 w-0.5 bg-[#3BF4C7] opacity-50" />
+        <motion.div
+          className="fixed left-1/2 w-6 h-6 bg-[#3BF4C7] rounded-full z-20 shadow-glow"
+          style={{
+            y: ballPosition,
+            x: "-50%",
+          }}
+        />
       </main>
     </div>
-  )
-}
+  );
+};
 
-interface DashboardBoxProps {
-  title: string
-  icon: React.ReactNode
-  content: string
-  status?: "pending" | "success"
-}
-
-const DashboardBox: React.FC<DashboardBoxProps> = ({ title, icon, content, status }) => {
+export default function DashboardPage() {
   return (
-    <motion.div
-      className="border border-white p-8 rounded-lg relative overflow-hidden group"
-      whileHover={{ scale: 1.05 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    >
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        animate={{
-          boxShadow: "0 0 20px 2px rgba(255, 255, 255, 0.3), 0 0 6px 1px rgba(255, 255, 255, 0.3) inset",
-        }}
-        transition={{ duration: 0.2 }}
-      />
-      <div className="flex items-center mb-4">
-        {icon}
-        <h2 className="text-white text-2xl font-bold ml-3">{title}</h2>
-      </div>
-      <p className="text-gray-300 text-lg">{content}</p>
-      {status && (
-        <div className="absolute bottom-3 right-3">
-          <span className={`px-3 py-1 rounded-full text-sm ${status === "pending" ? "bg-yellow-500" : "bg-green-500"}`}>
-            {status}
-          </span>
-        </div>
-      )}
-    </motion.div>
-  )
+    <AuthWrapper>
+      <DashboardContent />
+    </AuthWrapper>
+  );
 }
-
