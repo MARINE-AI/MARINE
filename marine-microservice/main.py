@@ -14,8 +14,8 @@ app = FastAPI()
 
 redis_client = redis.Redis(host="4.240.103.202", port=6379, db=0, decode_responses=True)
 
-KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9092")
-producer = KafkaProducer(bootstrap_servers=KAFKA_BROKERS)
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "4.240.103.202:9092")
+producer = KafkaProducer(bootstrap_servers=KAFKA_BROKER)
 
 REFERENCE_VIDEO = "reference_video.mp4"
 REFERENCE_REDIS_KEY = "reference_video_phashes"
