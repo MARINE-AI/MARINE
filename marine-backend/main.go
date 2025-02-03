@@ -13,6 +13,8 @@ import (
 	"marine-backend/controllers"
 	"marine-backend/eventhandlers"
 	"marine-backend/services"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+
 )
 
 func main() {
@@ -51,7 +53,15 @@ func main() {
 	kafkaHandler := eventhandlers.NewKafkaHandler([]string{config.KafkaBroker}, "piracy_links", "marine-ai", db)
 	go kafkaHandler.Start()
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: 100 * 1024 * 1024,
+	})
+
+    app.Use(cors.New(cors.Config{
+        AllowOrigins: "http://localhost:3000",
+        AllowMethods: "POST, GET, OPTIONS",
+        AllowHeaders: "Content-Type",
+    }))
 
 	app.Post("/upload", videoController.Upload)
 	app.Get("/reports", reportController.GetReports)

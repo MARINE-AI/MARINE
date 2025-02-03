@@ -21,19 +21,10 @@ func NewVideoService(db *pgxpool.Pool, uploadsDir string) *VideoService {
 	return &VideoService{DB: db, UploadsDir: uploadsDir}
 }
 
-func (vs *VideoService) SaveVideo(c *fiber.Ctx) (int, string, error) {
-	file, err := c.FormFile("file")
-	if err != nil {
-		return 0, "", err
-	}
+func (vs *VideoService) SaveVideo(c *fiber.Ctx, filePath string) (int, string, error) {
+	filename := filepath.Base(filePath)
 
-	os.MkdirAll(vs.UploadsDir, os.ModePerm)
-	savePath := filepath.Join(vs.UploadsDir, file.Filename)
-	if err := c.SaveFile(file, savePath); err != nil {
-		return 0, "", err
-	}
-
-	fingerprint, err := generateMD5(savePath)
+	fingerprint, err := generateMD5(filePath)
 	if err != nil {
 		return 0, "", err
 	}
@@ -41,7 +32,7 @@ func (vs *VideoService) SaveVideo(c *fiber.Ctx) (int, string, error) {
 	var videoID int
 	err = vs.DB.QueryRow(context.Background(),
 		"INSERT INTO videos (filename, fingerprint) VALUES ($1, $2) RETURNING id",
-		file.Filename, fingerprint).Scan(&videoID)
+		filename, fingerprint).Scan(&videoID)
 	if err != nil {
 		return 0, "", err
 	}

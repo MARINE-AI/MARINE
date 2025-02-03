@@ -20,31 +20,56 @@ func NewVideoController(videoService *services.VideoService, aiClient *services.
 }
 
 func (vc *VideoController) Upload(c *fiber.Ctx) error {
-	videoID, fingerprint, err := vc.VideoService.SaveVideo(c)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString("Error saving video: " + err.Error())
-	}
+	log.Println("[Upload] Received upload request")
 
+	// Retrieve the file from form-data using the key "file"
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
+		log.Printf("[Upload] ❌ Error retrieving file info: %v", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Error retrieving file info: " + err.Error())
 	}
-	filePath := vc.VideoService.UploadsDir + "/" + fileHeader.Filename
+	log.Printf("[Upload] ✅ File received: %+v", fileHeader)
 
+	// Define file path where the file will be saved
+	filePath := vc.VideoService.UploadsDir + "/" + fileHeader.Filename
+	log.Printf("[Upload] 📂 File will be saved to: %s", filePath)
+
+	// Save the file to disk
+	if err := c.SaveFile(fileHeader, filePath); err != nil {
+		log.Printf("[Upload] ❌ Error saving file to disk: %v", err)
+		return c.Status(fiber.StatusInternalServerError).SendString("Could not save file: " + err.Error())
+	}
+	log.Printf("[Upload] ✅ File saved successfully: %s", filePath)
+
+	// Save video details in the database, passing the file path
+	videoID, fingerprint, err := vc.VideoService.SaveVideo(c, filePath)
+	if err != nil {
+		log.Printf("[Upload] ❌ Error saving video: %v", err)
+		return c.Status(fiber.StatusInternalServerError).SendString("Error saving video: " + err.Error())
+	}
+	log.Printf("[Upload] ✅ Video saved successfully: videoID=%d, fingerprint=%s", videoID, fingerprint)
+
+	// Start asynchronous AI processing
 	go func(videoID int, filePath, filename string) {
+		log.Printf("[AI] ⏳ Starting AI processing for videoID=%d, filePath=%s", videoID, filePath)
 		aiResp, err := vc.AIServiceClient.ProcessVideo(filePath)
 		if err != nil {
-			log.Printf("Error processing video with AI: %v", err)
+			log.Printf("[AI] ❌ Error processing video with AI: %v", err)
 			return
 		}
-		log.Printf("AI analysis for video %d: match_score=%.2f, ai_hash=%s", videoID, aiResp.MatchScore, aiResp.ComputedHash)
+		log.Printf("[AI] ✅ Analysis complete: videoID=%d, match_score=%.2f, ai_hash=%s, metadata=%v",
+			videoID, aiResp.MatchScore, aiResp.ComputedHash, aiResp.Metadata)
+
+		// If match score is high, flag it as piracy
 		threshold := 85.0
 		if aiResp.MatchScore >= threshold {
 			piracyURL := "https://example.com/pirated/" + filename
-			log.Printf("Recorded piracy case for video %d with score %.2f, URL: %s", videoID, aiResp.MatchScore, piracyURL)
+			log.Printf("[AI] 🚨 Piracy detected! VideoID=%d, Match Score=%.2f, URL: %s", videoID, aiResp.MatchScore, piracyURL)
 		}
 	}(videoID, filePath, fileHeader.Filename)
 
+	// Return JSON response to the frontend
+	log.Printf("[Upload] ✅ Responding with: id=%d, filename=%s, fingerprint=%s", videoID, fileHeader.Filename, fingerprint)
 	return c.JSON(fiber.Map{
 		"id":          videoID,
 		"filename":    fileHeader.Filename,
