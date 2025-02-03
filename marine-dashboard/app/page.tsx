@@ -1,105 +1,75 @@
-"use client"
+ 
+import FloatingTopBar from "@/app/components/header"
 
-import { useState } from "react"
-
-export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [message, setMessage] = useState("")
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0])
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!file) return
-
-    setUploading(true)
-    setMessage("")
-
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-
-      const response = await fetch("http://localhost:8080/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) throw new Error("Upload failed")
-
-      const data = await response.json()
-      setMessage(`Upload successful! Video ID: ${data.id}`)
-    } catch (error) {
-      console.error("Upload error:", error)
-      setMessage("Upload failed. Please try again.")
-    } finally {
-      setUploading(false)
-      setFile(null)
-    }
-  }
-
+export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h2 className="text-3xl font-bold text-center mb-8 text-gray-800">Upload Your Video</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="relative">
-            <input type="file" accept="video/*" onChange={handleFileChange} className="hidden" id="file-upload" />
-            <label
-              htmlFor="file-upload"
-              className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:border-blue-500 hover:bg-blue-50 transition duration-150 ease-in-out cursor-pointer"
-            >
-              {file ? file.name : "Choose a video file"}
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={uploading || !file}
-            className={`w-full px-4 py-3 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-75 ${
-              uploading || !file
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 focus:ring-blue-400"
-            } transition duration-200 ease-in-out transform hover:scale-105`}
-          >
-            {uploading ? (
-              <span className="flex items-center justify-center">
-                <svg
-                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Uploading...
-              </span>
-            ) : (
-              "Upload Video"
-            )}
-          </button>
-        </form>
-
-        {message && (
-          <div
-            className={`mt-6 p-4 text-sm rounded-lg ${
-              message.includes("successful") ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-            }`}
-          >
-            {message}
-          </div>
-        )}
-      </div>
+    <div className="flex bg-midnight-blue min-h-screen">
+      
+      <FloatingTopBar />
+      <main className="flex-1 p-8 ml-24 mt-20">
+        <h1 className="text-4xl font-bold text-white mb-8">Welcome to Marines</h1>
+        <p className="text-xl text-gray-300 mb-8">
+          Protect your digital content with our advanced copyright protection and content tracking service.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <ServiceCard
+            title="Smart Search"
+            description="Scan the internet to identify unauthorized use of your copyrighted content using our advanced algorithms."
+            icon="🔍"
+          />
+          <ServiceCard
+            title="Video Fingerprinting"
+            description="Embed unique hashes in your videos for easy tracking and identification across the web."
+            icon="👆"
+          />
+          <ServiceCard
+            title="pHashing"
+            description="Use perceptual hashing to detect similar images and videos, even if they've been slightly modified."
+            icon="🧮"
+          />
+          <ServiceCard
+            title="FAISS Integration"
+            description="Leverage Facebook AI Similarity Search for fast and efficient content matching at scale."
+            icon="🚀"
+          />
+        </div>
+        <div id="about-us" className="mt-12">
+          <h2 className="text-2xl font-bold text-white mb-4">About Us</h2>
+          <p className="text-gray-300">
+            Marines is a cutting-edge SaaS platform dedicated to protecting your digital content and intellectual
+            property. Our team of experts combines advanced technology with years of experience to provide you with the
+            best content protection solutions.
+          </p>
+        </div>
+        <div id="protection" className="mt-12">
+          <h2 className="text-2xl font-bold text-white mb-4">Protection</h2>
+          <p className="text-gray-300">
+            Our comprehensive protection suite includes real-time monitoring, content fingerprinting, and AI-powered
+            detection systems. We ensure that your content remains secure across the internet, giving you peace of mind
+            and control over your digital assets.
+          </p>
+        </div>
+        <div id="benefits" className="mt-12">
+          <h2 className="text-2xl font-bold text-white mb-4">Benefits We Offer</h2>
+          <ul className="list-disc list-inside text-gray-300 space-y-2">
+            <li>24/7 content monitoring and protection</li>
+            <li>Advanced AI-powered detection algorithms</li>
+            <li>Customizable alerts and notifications</li>
+            <li>Comprehensive analytics and reporting</li>
+            <li>Dedicated customer support</li>
+            <li>Scalable solutions for businesses of all sizes</li>
+          </ul>
+        </div>
+      </main>
     </div>
   )
 }
+
+const ServiceCard = ({ title, description, icon }: { title: string; description: string; icon: string }) => (
+  <div className="bg-white bg-opacity-10 rounded-lg p-6 hover:bg-opacity-20 transition-colors duration-200">
+    <div className="text-4xl mb-4">{icon}</div>
+    <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+    <p className="text-gray-300">{description}</p>
+  </div>
+)
 

@@ -33,8 +33,8 @@ def cleanup_files(file_list: list):
     for file_path in file_list:
         try:
             os.remove(file_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to remove file {file_path}: {e}")
 
 @app.post("/upload-reference")
 async def upload_reference_video(video_file: UploadFile = File(...)):
@@ -105,6 +105,7 @@ async def match_video(video_file: UploadFile = File(...)):
             reference_phashes = compute_phashes(reference_frames)
             store_phashes(REFERENCE_REDIS_KEY, reference_phashes)
             cleanup_files(reference_frames)
+            return JSONResponse(status_code=400, content={"error": "Failed to compute hashes for reference video frames."})
         
         # Compute overall similarity.
         overall_similarity = compute_video_similarity(uploaded_phashes, reference_phashes)
