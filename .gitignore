@@ -1,0 +1,9 @@
+.env
+env
+_pycache_
+uploads
+venv
+temp_videos
+reference_video.mp4
+frames_temp
+.vscode
