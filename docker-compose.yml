@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+
+  marine-analysis:
+    build: ./marine-analysis
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKER}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - FRAMES_DIR=${FRAMES_DIR}
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD}
+      - REFERENCE_REDIS_KEY=${REFERENCE_REDIS_KEY}
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    ports:
+      - "8000:8000"
+
+  marine-backend:
+    build: ./marine-backend
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - KAFKA_BROKER=${KAFKA_BROKER}
+      - AI_SERVICE_URL=${AI_SERVICE_URL}
+    depends_on:
+      - kafka
+      - marine-analysis
+    ports:
+      - "8080:8080"
+
+  marine-crawler:
+    build: ./marine-crawler
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKER}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8001:8001"
+      
+volumes:
+  postgres_data:
