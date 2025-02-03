@@ -22,7 +22,6 @@ func NewVideoController(videoService *services.VideoService, aiClient *services.
 func (vc *VideoController) Upload(c *fiber.Ctx) error {
 	log.Println("[Upload] Received upload request")
 
-	// Retrieve the file from form-data using the key "file"
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		log.Printf("[Upload] ❌ Error retrieving file info: %v", err)
@@ -30,18 +29,15 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 	}
 	log.Printf("[Upload] ✅ File received: %+v", fileHeader)
 
-	// Define file path where the file will be saved
 	filePath := vc.VideoService.UploadsDir + "/" + fileHeader.Filename
 	log.Printf("[Upload] 📂 File will be saved to: %s", filePath)
 
-	// Save the file to disk
 	if err := c.SaveFile(fileHeader, filePath); err != nil {
 		log.Printf("[Upload] ❌ Error saving file to disk: %v", err)
 		return c.Status(fiber.StatusInternalServerError).SendString("Could not save file: " + err.Error())
 	}
 	log.Printf("[Upload] ✅ File saved successfully: %s", filePath)
 
-	// Save video details in the database, passing the file path
 	videoID, fingerprint, err := vc.VideoService.SaveVideo(c, filePath)
 	if err != nil {
 		log.Printf("[Upload] ❌ Error saving video: %v", err)
@@ -49,7 +45,6 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 	}
 	log.Printf("[Upload] ✅ Video saved successfully: videoID=%d, fingerprint=%s", videoID, fingerprint)
 
-	// Start asynchronous AI processing
 	go func(videoID int, filePath, filename string) {
 		log.Printf("[AI] ⏳ Starting AI processing for videoID=%d, filePath=%s", videoID, filePath)
 		aiResp, err := vc.AIServiceClient.ProcessVideo(filePath)
@@ -60,7 +55,6 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 		log.Printf("[AI] ✅ Analysis complete: videoID=%d, match_score=%.2f, ai_hash=%s, metadata=%v",
 			videoID, aiResp.MatchScore, aiResp.ComputedHash, aiResp.Metadata)
 
-		// If match score is high, flag it as piracy
 		threshold := 85.0
 		if aiResp.MatchScore >= threshold {
 			piracyURL := "https://example.com/pirated/" + filename
@@ -68,7 +62,6 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 		}
 	}(videoID, filePath, fileHeader.Filename)
 
-	// Return JSON response to the frontend
 	log.Printf("[Upload] ✅ Responding with: id=%d, filename=%s, fingerprint=%s", videoID, fileHeader.Filename, fingerprint)
 	return c.JSON(fiber.Map{
 		"id":          videoID,
