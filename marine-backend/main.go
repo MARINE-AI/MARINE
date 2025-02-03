@@ -4,18 +4,31 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/joho/godotenv"
 	"marine-backend/config"
 	"marine-backend/controllers"
 	"marine-backend/eventhandlers"
 	"marine-backend/services"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	config.DatabaseURL = os.Getenv("DATABASE_URL")
+	config.KafkaBroker = os.Getenv("KAFKA_BROKER")
+	config.AIServiceURL = os.Getenv("AI_SERVICE_URL")
+
 	if config.DatabaseURL == "" || config.KafkaBroker == "" || config.AIServiceURL == "" {
-		log.Fatal("Please set DATABASE_URL, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
+		log.Fatal("Error: Please set DATABASE_URL, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
 	}
 
 	db, err := pgxpool.Connect(context.Background(), config.DatabaseURL)
@@ -23,10 +36,12 @@ func main() {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	defer db.Close()
-	fmt.Println("Connected to PostgreSQL")
+	fmt.Println("✅ Connected to PostgreSQL")
 
 	if err := createTables(db); err != nil {
-		log.Fatalf("Failed to create tables: %v", err)
+		log.Fatalf("❌ Failed to create tables: %v", err)
+	} else {
+		fmt.Println("✅ Tables verified/created successfully")
 	}
 
 	videoService := services.NewVideoService(db, "uploads")
@@ -38,12 +53,22 @@ func main() {
 	kafkaHandler := eventhandlers.NewKafkaHandler([]string{config.KafkaBroker}, "piracy_links", "marine-ai", db)
 	go kafkaHandler.Start()
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit: 100 * 1024 * 1024,
+	})
+
+    app.Use(cors.New(cors.Config{
+        AllowOrigins: "http://localhost:3000",
+        AllowMethods: "POST, GET, OPTIONS",
+        AllowHeaders: "Content-Type",
+    }))
 
 	app.Post("/upload", videoController.Upload)
 	app.Get("/reports", reportController.GetReports)
 
-	log.Fatal(app.Listen(":8080"))
+	port := ":8080"
+	fmt.Printf("🚀 Server running on http://localhost%s\n", port)
+	log.Fatal(app.Listen(port))
 }
 
 func createTables(db *pgxpool.Pool) error {
@@ -56,7 +81,7 @@ func createTables(db *pgxpool.Pool) error {
 	);`
 	_, err := db.Exec(context.Background(), createVideosTable)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating videos table: %w", err)
 	}
 
 	createPiracyTable := `
@@ -68,5 +93,9 @@ func createTables(db *pgxpool.Pool) error {
 		detected_at TIMESTAMPTZ DEFAULT NOW()
 	);`
 	_, err = db.Exec(context.Background(), createPiracyTable)
-	return err
+	if err != nil {
+		return fmt.Errorf("error creating piracy_cases table: %w", err)
+	}
+
+	return nil
 }
