@@ -5,6 +5,11 @@ from aiohttp import ClientSession, ClientTimeout
 from bs4 import BeautifulSoup
 from app.kafka_client import get_kafka_producer
 from app.config import settings
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'marine-analysis')))
+from db import is_whitelisted,is_blacklisted
 from loguru import logger
 
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv", ".avi")
@@ -14,6 +19,15 @@ def is_valid_video_url(url: str) -> bool:
     netloc = parsed.netloc.lower()
     path = parsed.path.lower()
     query = parse_qs(parsed.query)
+    
+    if is_whitelisted(netloc):
+        logger.info(f"Skipping whitelisted site: {netloc}")
+        return False
+    
+    if is_blacklisted(netloc):
+        logger.info(f"Prioritizing blacklisted site: {netloc}")
+        return True
+    
     if "youtube.com" in netloc:
         if "/watch" in path and "v" in query and query["v"]:
             return True
@@ -78,6 +92,13 @@ async def fetch_page(url: str, session: ClientSession) -> str:
         return ""
 
 async def process_url(url: str, session: ClientSession):
+    parsed_url = urlparse(url)
+    netloc = parsed_url.netloc.lower()
+    
+    if is_whitelisted(netloc):
+        logger.info(f"Skipping whitelisted site: {netloc}")
+        return
+    
     video_links = []
     if is_valid_video_url(url):
         video_links.append(url)
@@ -87,9 +108,11 @@ async def process_url(url: str, session: ClientSession):
         if not html:
             return
         video_links = parse_video_links(html, base_url=url)
+    
     if not video_links:
         logger.info(f"No valid video links found on {url}")
         return
+    
     producer = await get_kafka_producer()
     for video_url in video_links:
         message = {"source_page": url, "video_url": video_url}

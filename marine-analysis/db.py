@@ -19,6 +19,8 @@ class UploadedVideo(Base):
     audio_spectrum = Column(JSON, nullable=True)
     flagged = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
+    whitelist = Column(JSON, nullable=True)  # Websites the user doesn't want to scrape
+    blacklist = Column(JSON, nullable=True)  # Websites the user prioritizes for piracy detection
 
 class CrawledVideo(Base):
     __tablename__ = "crawled_videos"
