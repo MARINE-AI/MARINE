@@ -27,7 +27,7 @@ func main() {
 	config.AIServiceURL = os.Getenv("AI_SERVICE_URL")
 
 	if config.DatabaseURL == "" || config.KafkaBroker == "" || config.AIServiceURL == "" {
-		log.Fatal("Error: Please set DATABASE_URL, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
+		log.Fatal("Error: Please set DATABASE_URL2, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
 	}
 
 	db, err := pgxpool.Connect(context.Background(), config.DatabaseURL)
