@@ -1,9 +1,9 @@
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, Boolean, func
+from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, Boolean, func, select
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or "postgresql+asyncpg://ish:forzajuve!2@4.240.103.202:5432/marine"
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 Base = declarative_base()
@@ -18,9 +18,8 @@ class UploadedVideo(Base):
     uploaded_phashes = Column(JSON)
     audio_spectrum = Column(JSON, nullable=True)
     flagged = Column(Boolean, default=False)
+    user_email = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
-    whitelist = Column(JSON, nullable=True)  # Websites the user doesn't want to scrape
-    blacklist = Column(JSON, nullable=True)  # Websites the user prioritizes for piracy detection
 
 class CrawledVideo(Base):
     __tablename__ = "crawled_videos"

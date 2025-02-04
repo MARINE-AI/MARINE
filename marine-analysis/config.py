@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     DATABASE_URL: str = os.getenv("DATABASE_URL")
-
+    AI_MICROSERVICE_URL: str = os.getenv("AI_MICROSERVICE_URL", "http://localhost:8000")
+    
     class Config:
         env_file = ".env"
 
