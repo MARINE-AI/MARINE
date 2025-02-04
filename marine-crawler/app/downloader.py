@@ -5,20 +5,15 @@ import json
 import platform
 import glob
 from urllib.parse import urlparse, parse_qs
-import httpx  # Async HTTP client
+import httpx
 from aiokafka import AIOKafkaConsumer
 from app.kafka_client import get_kafka_producer, get_kafka_consumer
 from app.config import settings
 from loguru import logger
 
-# Define a minimum video size in bytes. Adjust as needed.
 MIN_VIDEO_SIZE = 1024
 
 def shell_quote(arg: str) -> str:
-    """
-    Quote an argument for the shell.
-    On Windows, wrap in double quotes; on POSIX, use shlex.quote.
-    """
     if platform.system() == "Windows":
         return '"{}"'.format(arg.replace('"', ''))
     return shlex.quote(arg)
@@ -33,12 +28,6 @@ async def run_command(cmd: str, stdin=None):
     return process
 
 async def process_video_task(message_value: bytes):
-    """
-    Downloads a video using yt-dlp, segments it with ffmpeg, and then automatically sends
-    each chunk to the AI microservice's endpoints:
-      - /upload-video-chunk for each chunk
-      - /match-video-chunks to trigger matching after all chunks are sent.
-    """
     try:
         msg = json.loads(message_value.decode("utf-8"))
         video_url = msg.get("video_url")
@@ -50,7 +39,7 @@ async def process_video_task(message_value: bytes):
         if "youtube.com/embed/" in video_url:
             video_url = video_url.replace("youtube.com/embed/", "youtube.com/watch?v=")
 
-        # Derive a filename-friendly video ID.
+        # Derive a filename-friendly video identifier.
         parsed_url = urlparse(video_url)
         if "youtube.com" in parsed_url.netloc or "youtu.be" in parsed_url.netloc:
             query = parse_qs(parsed_url.query)
@@ -63,13 +52,11 @@ async def process_video_task(message_value: bytes):
 
         logger.info(f"Processing video: {video_url}")
 
-        # Ensure downloads directory exists.
         downloads_dir = os.path.join(os.getcwd(), "downloads")
         if not os.path.exists(downloads_dir):
             os.makedirs(downloads_dir)
             logger.info(f"Created downloads directory: {downloads_dir}")
 
-        # Download the video using yt-dlp with a template preserving the native extension.
         video_template = os.path.join(downloads_dir, f"{video_id}.%(ext)s")
         yt_dlp_cmd = f"yt-dlp -f best -o {shell_quote(video_template)} {shell_quote(video_url)}"
         logger.info(f"Running yt-dlp command: {yt_dlp_cmd}")
@@ -79,7 +66,6 @@ async def process_video_task(message_value: bytes):
             logger.error(f"yt-dlp failed: {stderr.decode('utf-8')}")
             return
 
-        # Wait briefly for the file system to update.
         await asyncio.sleep(2)
         matching_files = glob.glob(os.path.join(downloads_dir, f"{video_id}.*"))
         if not matching_files:
@@ -100,7 +86,6 @@ async def process_video_task(message_value: bytes):
                 logger.info(f"Sent raw chunk for video {video_id} (status: {resp.status_code})")
             return
 
-        # Segment the video using ffmpeg.
         output_pattern = os.path.join(downloads_dir, f"{video_id}_chunk_%03d.mp4")
         ffmpeg_cmd = (
             f"ffmpeg -hide_banner -loglevel error -i {shell_quote(video_file)} "
@@ -149,9 +134,6 @@ async def process_video_task(message_value: bytes):
         logger.error(f"Error processing video task: {e}")
 
 async def video_downloader_worker():
-    """
-    Consumes Kafka messages from the video download topic and processes each video task.
-    """
     consumer = await get_kafka_consumer(settings.kafka_video_download_topic, group_id="video_downloader_group")
     try:
         async for msg in consumer:
@@ -163,8 +145,5 @@ async def video_downloader_worker():
         await consumer.stop()
 
 def run_video_downloader():
-    """
-    Runs the video downloader worker.
-    """
     loop = asyncio.get_event_loop()
     loop.run_until_complete(video_downloader_worker())

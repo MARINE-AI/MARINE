@@ -1,140 +1,240 @@
-"use client";
+"use client"
 
-import { useEffect, useRef, useState } from "react";
-import { motion, useScroll } from "framer-motion";
-import Sidebar from "../components/sidebar";
-import AuthWrapper from "@/components/auth-wrapper";
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
+import {
+  Upload,
+  FileVideo,
+  AlertTriangle,
+  Check,
+  ChevronRight,
+  Search,
+  Frown,
+  Clock,
+} from "lucide-react"
+import Link from "next/link"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
-const DashboardContent = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ container: containerRef });
-  const [ballPosition, setBallPosition] = useState(0);
+interface VideoUpload {
+  id: number
+  user_email: string
+  filename: string
+  title: string
+  description: string
+  fingerprint: string
+  created_at: string
+}
+
+export default function Dashboard() {
+  const { data: session } = useSession()
+  const [uploads, setUploads] = useState<VideoUpload[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedUpload, setSelectedUpload] = useState<VideoUpload | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (containerRef.current) {
-        const scrollPosition = containerRef.current.scrollTop;
-        setBallPosition(Math.min(scrollPosition / 2, 400));
+    const fetchUploads = async () => {
+      if (!session?.user?.email) {
+        setIsLoading(false)
+        return
       }
-    };
 
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener("scroll", handleScroll);
+      try {
+        setIsLoading(true)
+        const baseUrl = "http://localhost:8080/dashboard/videos/"
+        const fullUrl = baseUrl + (session.user.email)
+
+        const res = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch uploads")
+        }
+
+        const data: VideoUpload[] = await res.json()
+        setUploads(data || [])
+        setError(null)
+      } catch (err) {
+        console.error("Error fetching uploads:", err)
+        setError(err instanceof Error ? err.message : "An unknown error occurred")
+        setUploads([])
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    return () => {
-      if (container) {
-        container.removeEventListener("scroll", handleScroll);
-      }
-    };
-  }, []);
+    fetchUploads()
+  }, [session])
+
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return "Good morning"
+    if (hour < 18) return "Good afternoon"
+    return "Good evening"
+  }
+
+  const filteredUploads = uploads.filter((upload) =>
+    upload.title.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#003f42] flex items-center justify-center">
+        <div className="text-[#00d1c1] text-2xl">Loading your uploads...</div>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex bg-black min-h-screen">
-      <Sidebar />
-
-      <main
-        ref={containerRef}
-        className="flex-1 p-8 ml-24 mr-12 relative overflow-y-auto h-screen"
-      >
-        <div className="relative z-30 space-y-48">
-          <section className="content-box">
-            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
-              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                Uploading Data and Description
-              </h2>
-              <div className="space-y-6">
-                <div className="flex items-start space-x-6">
-                  <div className="w-1/2">
-                    <h3 className="text-2xl text-white mb-4">
-                      Data
-                    </h3>
-                    <p className="text-gray-300 leading-relaxed">
-                      Data which is supposed to be secured should be uploaded on the upload file portal
-                    </p>
-                  </div>
-                  <div className="w-1/2">
-                    <h3 className="text-2xl text-white mb-4">
-                      Description
-                    </h3>
-                    <p className="text-gray-300 leading-relaxed">
-                      Web dorking and crawling depend on your description; the more precise your description, the easier it is for dorks to find relevant sites.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="content-box">
-            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
-              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                
-              </h2>
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <h3 className="text-2xl text-white">Data Analysis</h3>
-                  <p className="text-gray-300 leading-relaxed">
-                    Multi-layer hash generation combining DCT coefficients and temporal
-                    sampling for video content fingerprinting.
-                  </p>
-                </div>
-                <div className="space-y-6">
-                  <h3 className="text-2xl text-white">Blockchain Hashing</h3>
-                  <p className="text-gray-300 leading-relaxed">
-                    SHA-3 cryptographic hashing combined with Merkle tree structures for
-                    immutable content verification.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="content-box">
-            <div className="bg-white/5 rounded-2xl p-10 backdrop-blur-xl border border-[#3BF4C7]/20">
-              <h2 className="text-4xl font-bold text-[#3BF4C7] mb-8">
-                Data Analysis 
-              </h2>
-              <div className="flex space-x-8">
-                <div className="w-1/2">
-                  <h3 className="text-2xl text-white mb-4">
-                    Distributed Node System
-                  </h3>
-                  <p className="text-gray-300 leading-relaxed">
-                    Worldwide node network for real-time content verification. Geographic
-                    redundancy ensures 100% uptime.
-                  </p>
-                </div>
-                <div className="w-1/2">
-                  <h3 className="text-2xl text-white mb-4">AI Monitoring</h3>
-                  <p className="text-gray-300 leading-relaxed">
-                    Deep learning models constantly scan global networks for content
-                    matches and potential infringements.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
+    <div className="min-h-screen bg-[#003f42] p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-[#005f63] rounded-lg p-6 mb-6 shadow-lg border border-[#00d1c1]/30">
+          <h1 className="text-3xl font-bold text-[#00d1c1] mb-2">
+            {getGreeting()}, {session?.user?.name?.split(" ")[0] || "User"}!
+          </h1>
+          <p className="text-lg text-[#00b8d4]">Welcome to your Marine Dashboard</p>
         </div>
 
-        <div className="fixed left-1/2 top-0 bottom-0 w-0.5 bg-[#3BF4C7] opacity-50" />
-        <motion.div
-          className="fixed left-1/2 w-6 h-6 bg-[#3BF4C7] rounded-full z-20 shadow-glow"
-          style={{
-            y: ballPosition,
-            x: "-50%",
-          }}
-        />
-      </main>
-    </div>
-  );
-};
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/dashboard/upload">
+            <Button className="bg-[#00b8d4] text-white hover:bg-[#00a9b0] transition-colors duration-300">
+              <Upload className="mr-2 h-4 w-4" /> Upload New Content
+            </Button>
+          </Link>
+          <div className="relative w-64">
+            <Input
+              type="text"
+              placeholder="Search uploads..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-[#005f63] text-white border-[#00d1c1] focus:ring-2 focus:ring-[#00b8d4] placeholder-[#00a9b0]"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#00d1c1]" />
+          </div>
+        </div>
 
-export default function DashboardPage() {
-  return (
-    <AuthWrapper>
-      <DashboardContent />
-    </AuthWrapper>
-  );
+        {error && (
+          <Card className="bg-[#005f63] border-red-500 text-center p-6">
+            <CardContent>
+              <AlertTriangle className="mx-auto text-red-500 h-16 w-16 mb-4" />
+              <h2 className="text-2xl font-bold text-white mb-2">Error Fetching Uploads</h2>
+              <p className="text-[#00a9b0] mb-4">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="h-[calc(100vh-300px)] overflow-y-auto">
+          {uploads.length === 0 && !error ? (
+            <Card className="bg-[#005f63] border-[#00d1c1] text-center p-6">
+              <CardContent>
+                <Frown className="mx-auto text-[#00d1c1] h-16 w-16 mb-4" />
+                <h2 className="text-2xl font-bold text-[#00b8d4] mb-2">No uploads yet</h2>
+                <p className="text-[#00a9b0] mb-4">Start by uploading your first piece of content!</p>
+                <Link href="/dashboard/upload">
+                  <Button className="bg-[#00b8d4] text-white hover:bg-[#00a9b0] transition-colors duration-300">
+                    <Upload className="mr-2 h-4 w-4" /> Upload New Content
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : filteredUploads.length === 0 ? (
+            // No Search Results State
+            <Card className="bg-[#005f63] border-[#00d1c1] text-center p-6">
+              <CardContent>
+                <Search className="mx-auto text-[#00d1c1] h-16 w-16 mb-4" />
+                <h2 className="text-2xl font-bold text-[#00b8d4] mb-2">No results found</h2>
+                <p className="text-[#00a9b0]">Try adjusting your search term</p>
+              </CardContent>
+            </Card>
+          ) : (
+            // Uploads Grid
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredUploads.map((upload) => (
+                <Card
+                  key={upload.id}
+                  className="bg-[#005f63] border-[#00d1c1]/50 hover:bg-[#006d72] transition-all duration-300"
+                  onClick={() => setSelectedUpload(upload)}
+                >
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-[#00d1c1] text-lg flex items-center">
+                      <FileVideo className="mr-2 text-[#00b8d4]" />
+                      {upload.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <CardDescription className="text-[#00b8d4] text-xs">
+                      Uploaded on {new Date(upload.created_at).toLocaleDateString()}
+                    </CardDescription>
+                    <p className="text-[#00a9b0] text-sm mt-2">
+                      {upload.description || "No description provided."}
+                    </p>
+                  </CardContent>
+                  <CardFooter>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full text-[#00d1c1] border-[#00d1c1] hover:bg-[#00a9b0] hover:text-[#003f42] transition-colors duration-300"
+                        >
+                          View Details <ChevronRight className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-[#005f63] border-[#00d1c1]">
+                        <DialogHeader>
+                          <DialogTitle className="text-[#00d1c1]">
+                            {selectedUpload?.title}
+                          </DialogTitle>
+                          <DialogDescription className="text-[#00b8d4]">
+                            Uploaded on{" "}
+                            {selectedUpload
+                              ? new Date(selectedUpload.created_at).toLocaleString()
+                              : ""}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="text-[#00a9b0]">
+                          <p className="mb-2">
+                            <strong>Filename:</strong> {selectedUpload?.filename}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Description:</strong>{" "}
+                            {selectedUpload?.description || "N/A"}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Fingerprint:</strong> {selectedUpload?.fingerprint}
+                          </p>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

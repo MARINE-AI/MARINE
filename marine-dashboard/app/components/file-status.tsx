@@ -1,58 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 interface FileStatusProps {
-    status: 'idle' | 'loading' | 'success' | 'error';
+  initialStatus?: string;
 }
 
-const FileStatus: React.FC<FileStatusProps> = ({ status }) => {
-    const [progress, setProgress] = useState(0);
+const FileStatus: React.FC<FileStatusProps> = ({ initialStatus = "Waiting for updates..." }) => {
+  const [status, setStatus] = useState(initialStatus);
+  const { data: session } = useSession();
 
-    useEffect(() => {
-        let interval: NodeJS.Timeout | null = null;
+  useEffect(() => {
+    if (!session || !session.user || !session.user.email) {
+      console.error("No user session available for SSE connection.");
+      return;
+    }
+    const userEmail = session.user.email;
+    const eventSource = new EventSource(`http://localhost:8080/sse?user_email=${encodeURIComponent(userEmail)}`);
 
-        if (status === 'loading') {
-            setProgress(0);
-            interval = setInterval(() => {
-                setProgress((prev) => (prev < 100 ? prev + 10 : 100));
-            }, 500);
-        } else if (status === 'idle' || status === 'error') {
-            setProgress(0);
-        } else if (status === 'success') {
-            setProgress(100);
-        }
-
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [status]);
-
-    const getStatusMessage = () => {
-        switch (status) {
-            case 'idle': return 'Idle';
-            case 'loading': return 'Uploading...';
-            case 'success': return 'Upload Successful!';
-            case 'error': return 'Upload Failed!';
-            default: return '';
-        }
+    eventSource.onmessage = (e) => {
+      setStatus(e.data);
     };
 
-    return (
-        <div style={{ width: '100%', textAlign: 'center', fontSize: '14px' }}>
-            <div>{getStatusMessage()}</div>
-            {status === 'loading' && (
-                <div style={{ width: '100%', backgroundColor: '#ddd', borderRadius: '5px', marginTop: '5px' }}>
-                    <div
-                        style={{
-                            width: `${progress}%`,
-                            height: '10px',
-                            backgroundColor: '#4caf50',
-                            transition: 'width 0.5s ease-in-out',
-                        }}
-                    ></div>
-                </div>
-            )}
-        </div>
-    );
+    eventSource.onerror = (e) => {
+      console.error("SSE error:", e);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [session]);
+
+  return (
+    <div style={{ padding: "10px", background: "#f0f0f0", borderRadius: "5px" }}>
+      <strong>Status:</strong> {status}
+    </div>
+  );
 };
 
 export default FileStatus;

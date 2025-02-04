@@ -24,13 +24,13 @@ func NewAIServiceClient(aiServiceURL string) *AIServiceClient {
 }
 
 type AIResponse struct {
-	MatchScore   float64                `json:"match_score"`
-	ComputedHash string                 `json:"computed_hash"`
-	Metadata     map[string]interface{} `json:"metadata"`
-	KafkaMessage string                 `json:"kafka_message,omitempty"`
+	MatchScore    float64                `json:"match_score"`
+	ComputedHash  string                 `json:"computed_hash"`
+	VideoMetadata map[string]interface{} `json:"video_metadata"`
+	KafkaMessage  string                 `json:"kafka_message,omitempty"`
 }
 
-func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, error) {
+func (client *AIServiceClient) ProcessVideo(videoFilePath, userEmail, name, description string) (AIResponse, error) {
 	var result AIResponse
 
 	file, err := os.Open(videoFilePath)
@@ -41,6 +41,7 @@ func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, e
 
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
+
 	part, err := writer.CreateFormFile("video_file", filepath.Base(videoFilePath))
 	if err != nil {
 		return result, err
@@ -48,6 +49,17 @@ func (client *AIServiceClient) ProcessVideo(videoFilePath string) (AIResponse, e
 	if _, err := io.Copy(part, file); err != nil {
 		return result, err
 	}
+
+	if err := writer.WriteField("user_email", userEmail); err != nil {
+		return result, err
+	}
+	if err := writer.WriteField("name", name); err != nil {
+		return result, err
+	}
+	if err := writer.WriteField("description", description); err != nil {
+		return result, err
+	}
+
 	if err := writer.Close(); err != nil {
 		return result, err
 	}

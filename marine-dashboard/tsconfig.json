@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -15,9 +19,17 @@
     "incremental": true,
     "baseUrl": ".", // ✅ Ensures correct resolution for imports
     "paths": {
-      "@/*": ["./app/*"] // ✅ Explicitly set to `app/` since Next.js uses App Router
+      "@/*": [
+        "./app/*"
+      ] // ✅ Explicitly set to `app/` since Next.js uses App Router
     },
     "forceConsistentCasingInFileNames": true // ✅ Prevents casing issues in imports
+    ,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
   "include": [
     "next-env.d.ts",
@@ -28,5 +40,9 @@
     "pages/**/*.tsx",
     "components/**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist", ".next"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next"
+  ]
 }
