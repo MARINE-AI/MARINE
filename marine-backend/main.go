@@ -22,7 +22,7 @@ func main() {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	config.DatabaseURL = os.Getenv("DATABASE_URL")
+	config.DatabaseURL = os.Getenv("DATABASE_URL2")
 	config.KafkaBroker = os.Getenv("KAFKA_BROKER")
 	config.AIServiceURL = os.Getenv("AI_SERVICE_URL")
 
