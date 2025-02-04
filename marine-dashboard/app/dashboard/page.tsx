@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useScroll } from "framer-motion";
 import Sidebar from "../components/sidebar";
-import AuthWrapper from "@/app/components/auth-wrapper";
+import AuthWrapper from "@/components/auth-wrapper";
 
 const DashboardContent = () => {
   const containerRef = useRef<HTMLDivElement>(null);
