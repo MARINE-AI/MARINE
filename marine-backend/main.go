@@ -27,7 +27,7 @@ func main() {
 	config.AIServiceURL = os.Getenv("AI_SERVICE_URL")
 
 	if config.DatabaseURL == "" || config.KafkaBroker == "" || config.AIServiceURL == "" {
-		log.Fatal("Error: Please set DATABASE_URL, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
+		log.Fatal("Error: Please set DATABASE_URL2, KAFKA_BROKER, and AI_SERVICE_URL environment variables")
 	}
 
 	db, err := pgxpool.Connect(context.Background(), config.DatabaseURL)
@@ -49,6 +49,7 @@ func main() {
 	videoController := controllers.NewVideoController(videoService, aiClient)
 	reportController := controllers.NewReportController(db)
 	dashboardController := controllers.NewDashboardController(db)
+	crawlerController := controllers.NewCrawlerController()
 
 	kafkaHandler := eventhandlers.NewKafkaHandler([]string{config.KafkaBroker}, "piracy_links", "marine-ai", db)
 	go kafkaHandler.Start()
@@ -66,6 +67,10 @@ func main() {
 	app.Post("/upload", videoController.Upload)
 	app.Get("/reports", reportController.GetReports)
 	app.Get("/dashboard/videos/:user_email", dashboardController.GetUserUploadedVideos)
+	app.Get("/relay-sse", dashboardController.RelaySSE)
+
+	app.Post("/crawler/submit", crawlerController.SubmitURL)
+	app.Get("/crawler/start-crawling", crawlerController.StartCrawling)
 
 	port := ":8080"
 	fmt.Printf("🚀 Server running on http://localhost%s\n", port)

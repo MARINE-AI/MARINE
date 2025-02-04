@@ -12,3 +12,4 @@ app.include_router(scraper_router, prefix="/scrape", tags=["Web Scraping"])
 @app.get("/")
 def root():
     return {"message": "Dorking & Scraping Microservices are running!"}
+    
