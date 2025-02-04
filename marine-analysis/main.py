@@ -2,6 +2,7 @@ import os
 import subprocess
 import glob
 import math
+import json
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -40,8 +41,27 @@ def average_hash_vector(hex_list: list) -> list:
     avg_vector = [x / count for x in avg_vector]
     return avg_vector
 
+def parse_db_vector(db_value):
+    if db_value is None:
+        return None
+    if isinstance(db_value, list):
+        return db_value
+    if isinstance(db_value, str):
+        try:
+            return json.loads(db_value)
+        except Exception as e:
+            logger.error(f"Failed to parse DB vector as JSON: {e}")
+            return None
+    return None
+
 def cosine_similarity(vec1: list, vec2: list) -> float:
-    dot = sum(a * b for a, b in zip(vec1, vec2))
+    if not vec1 or not vec2:
+        return 0.0
+    try:
+        dot = sum(a * b for a, b in zip(vec1, vec2))
+    except Exception as e:
+        logger.error(f"Error computing dot product: {e}")
+        return 0.0
     norm1 = math.sqrt(sum(a * a for a in vec1))
     norm2 = math.sqrt(sum(b * b for b in vec2))
     if norm1 == 0 or norm2 == 0:
@@ -102,7 +122,7 @@ async def match_video(
         f.write(await video_file.read())
 
     pattern = os.path.join(settings.FRAMES_DIR, f"uploaded_{filename}_%d.jpg")
-    frames = None  # Initialize frames so we can clean up later
+    frames = None
     try:
         frames = extract_keyframes(temp_path, pattern, fps=1)
         if not frames:
@@ -130,7 +150,7 @@ async def match_video(
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing:
-                existing.hash_vector = avg_vector  # now a list of floats
+                existing.hash_vector = avg_vector
                 existing.audio_spectrum = audio_fp
                 existing.fingerprint = custom_video_id
                 existing.user_email = user_email
@@ -142,7 +162,7 @@ async def match_video(
                     title=name,
                     description=description,
                     fingerprint=custom_video_id,
-                    hash_vector=avg_vector,  # store the averaged vector
+                    hash_vector=avg_vector,
                     audio_spectrum=audio_fp
                 )
                 session.add(new_record)
@@ -237,7 +257,9 @@ async def match_against_crawled(uploaded_vector: list, new_video_id: str):
         result = await session.execute(stmt)
         for row in result.fetchall():
             crawled_video_id = row[0]
-            crawled_hash_vector = row[1]  # expected to be a list of floats from the DB
+            crawled_hash_vector = parse_db_vector(row[1])
+            if not crawled_hash_vector:
+                continue
             similarity = compute_video_similarity(uploaded_vector, crawled_hash_vector)
             if similarity >= settings.SIMILARITY_THRESHOLD:
                 matches.append({"crawled_video_id": crawled_video_id, "similarity": round(similarity, 2)})
@@ -254,7 +276,9 @@ async def match_against_uploaded(uploaded_vector: list, new_video_id: str):
         result = await session.execute(stmt)
         for row in result.fetchall():
             uploaded_video_id = row[0]
-            uploaded_hash_vector = row[1]  # expected to be a list of floats from the DB
+            uploaded_hash_vector = parse_db_vector(row[1])
+            if not uploaded_hash_vector:
+                continue
             similarity = compute_video_similarity(uploaded_vector, uploaded_hash_vector)
             if similarity >= settings.SIMILARITY_THRESHOLD:
                 matches.append({"uploaded_video_id": uploaded_video_id, "similarity": round(similarity, 2)})
@@ -270,13 +294,16 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception as e:
         logger.error(f"Error during reassembly for video_id {video_id}: {e}")
         return None
+
     pattern = os.path.join(settings.FRAMES_DIR, f"{video_id}_%d.jpg")
     frames = extract_keyframes(reassembled, pattern, fps=1)
     if not frames:
         logger.error(f"Failed to extract keyframes from reassembled video {video_id}")
         return None
+
     phash_hex_list = compute_phashes(frames)
     avg_vector = average_hash_vector(phash_hex_list)
+
     matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
 
@@ -304,6 +331,7 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception:
         pass
     cleanup_files(frames)
+
     if matches:
         aggregate_score = max(match["similarity"] for match in matches)
     else:
