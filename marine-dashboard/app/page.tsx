@@ -1,4 +1,4 @@
-import FloatingTopBar from "@/app/components/header"
+import FloatingTopBar from "@/components/header"
 
 export default function Home() {
   return (
