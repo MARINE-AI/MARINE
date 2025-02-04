@@ -66,6 +66,7 @@ func main() {
 	app.Post("/upload", videoController.Upload)
 	app.Get("/reports", reportController.GetReports)
 	app.Get("/dashboard/videos/:user_email", dashboardController.GetUserUploadedVideos)
+	app.Get("/relay-sse", dashboardController.RelaySSE)
 
 	port := ":8080"
 	fmt.Printf("🚀 Server running on http://localhost%s\n", port)
