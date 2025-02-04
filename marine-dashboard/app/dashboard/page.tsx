@@ -2,9 +2,25 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { Upload, FileVideo, AlertTriangle, Check, ChevronRight, Search, Frown, Clock } from "lucide-react"
+import {
+  Upload,
+  FileVideo,
+  AlertTriangle,
+  Check,
+  ChevronRight,
+  Search,
+  Frown,
+  Clock,
+} from "lucide-react"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -17,18 +33,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-// Define a comprehensive type for video uploads
 interface VideoUpload {
-  id: number;
-  title: string;
-  status: "clean" | "flagged";
-  uploadDate: string;
-  duration: string;
-  analysisDetails?: {
-    contentId: string;
-    similarityPercentage: number;
-    flaggedSection?: string;
-  };
+  id: number
+  user_email: string
+  filename: string
+  title: string
+  description: string
+  fingerprint: string
+  created_at: string
 }
 
 export default function Dashboard() {
@@ -41,7 +53,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchUploads = async () => {
-      // Only fetch if user is logged in
       if (!session?.user?.email) {
         setIsLoading(false)
         return
@@ -49,26 +60,26 @@ export default function Dashboard() {
 
       try {
         setIsLoading(true)
-        const res = await fetch(
-          `http://localhost:8080/dashboard/videos?user_email=${encodeURIComponent(session.user.email)}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          }
-        )
+        const baseUrl = "http://localhost:8080/dashboard/videos/"
+        const fullUrl = baseUrl + (session.user.email)
+
+        const res = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
 
         if (!res.ok) {
-          throw new Error('Failed to fetch uploads')
+          throw new Error("Failed to fetch uploads")
         }
 
         const data: VideoUpload[] = await res.json()
-        setUploads(data || [])  // Ensure data is an array even if null
+        setUploads(data || [])
         setError(null)
       } catch (err) {
-        console.error('Error fetching uploads:', err)
-        setError(err instanceof Error ? err.message : 'An unknown error occurred')
+        console.error("Error fetching uploads:", err)
+        setError(err instanceof Error ? err.message : "An unknown error occurred")
         setUploads([])
       } finally {
         setIsLoading(false)
@@ -85,11 +96,10 @@ export default function Dashboard() {
     return "Good evening"
   }
 
-  const filteredUploads = uploads ? uploads.filter((upload) => 
+  const filteredUploads = uploads.filter((upload) =>
     upload.title.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : []
+  )
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#003f42] flex items-center justify-center">
@@ -101,7 +111,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#003f42] p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Greeting Section */}
         <div className="bg-[#005f63] rounded-lg p-6 mb-6 shadow-lg border border-[#00d1c1]/30">
           <h1 className="text-3xl font-bold text-[#00d1c1] mb-2">
             {getGreeting()}, {session?.user?.name?.split(" ")[0] || "User"}!
@@ -109,7 +118,6 @@ export default function Dashboard() {
           <p className="text-lg text-[#00b8d4]">Welcome to your Marine Dashboard</p>
         </div>
 
-        {/* Upload and Search Section */}
         <div className="flex justify-between items-center mb-6">
           <Link href="/dashboard/upload">
             <Button className="bg-[#00b8d4] text-white hover:bg-[#00a9b0] transition-colors duration-300">
@@ -128,7 +136,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Error Handling */}
         {error && (
           <Card className="bg-[#005f63] border-red-500 text-center p-6">
             <CardContent>
@@ -139,10 +146,8 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Uploads Section with Scrollable Area */}
         <div className="h-[calc(100vh-300px)] overflow-y-auto">
           {uploads.length === 0 && !error ? (
-            // No Uploads State
             <Card className="bg-[#005f63] border-[#00d1c1] text-center p-6">
               <CardContent>
                 <Frown className="mx-auto text-[#00d1c1] h-16 w-16 mb-4" />
@@ -171,6 +176,7 @@ export default function Dashboard() {
                 <Card
                   key={upload.id}
                   className="bg-[#005f63] border-[#00d1c1]/50 hover:bg-[#006d72] transition-all duration-300"
+                  onClick={() => setSelectedUpload(upload)}
                 >
                   <CardHeader className="pb-2">
                     <CardTitle className="text-[#00d1c1] text-lg flex items-center">
@@ -179,28 +185,12 @@ export default function Dashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pb-2">
-                    <div className="flex justify-between items-center mb-2">
-                      <Badge
-                        variant={upload.status === "clean" ? "default" : "destructive"}
-                        className={`${
-                          upload.status === "clean" ? "bg-[#00d1c1] hover:bg-[#00b8d4]" : "bg-red-500 hover:bg-red-600"
-                        } text-[#003f42]`}
-                      >
-                        {upload.status === "clean" ? (
-                          <>
-                            <Check className="mr-1 h-3 w-3" /> Clean
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="mr-1 h-3 w-3" /> Flagged
-                          </>
-                        )}
-                      </Badge>
-                      <span className="text-[#00a9b0] text-sm flex items-center">
-                        <Clock className="mr-1 h-3 w-3" /> {upload.duration}
-                      </span>
-                    </div>
-                    <CardDescription className="text-[#00b8d4] text-xs">Uploaded on {upload.uploadDate}</CardDescription>
+                    <CardDescription className="text-[#00b8d4] text-xs">
+                      Uploaded on {new Date(upload.created_at).toLocaleDateString()}
+                    </CardDescription>
+                    <p className="text-[#00a9b0] text-sm mt-2">
+                      {upload.description || "No description provided."}
+                    </p>
                   </CardContent>
                   <CardFooter>
                     <Dialog>
@@ -208,32 +198,33 @@ export default function Dashboard() {
                         <Button
                           variant="outline"
                           className="w-full text-[#00d1c1] border-[#00d1c1] hover:bg-[#00a9b0] hover:text-[#003f42] transition-colors duration-300"
-                          onClick={() => setSelectedUpload(upload)}
                         >
                           View Details <ChevronRight className="ml-2 h-4 w-4" />
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="bg-[#005f63] border-[#00d1c1]">
                         <DialogHeader>
-                          <DialogTitle className="text-[#00d1c1]">{selectedUpload?.title}</DialogTitle>
+                          <DialogTitle className="text-[#00d1c1]">
+                            {selectedUpload?.title}
+                          </DialogTitle>
                           <DialogDescription className="text-[#00b8d4]">
-                            Uploaded on {selectedUpload?.uploadDate}
+                            Uploaded on{" "}
+                            {selectedUpload
+                              ? new Date(selectedUpload.created_at).toLocaleString()
+                              : ""}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="text-[#00a9b0]">
-                          <p className="mb-2">Status: {selectedUpload?.status}</p>
-                          <p className="mb-2">Duration: {selectedUpload?.duration}</p>
-                          {selectedUpload?.status === "flagged" && selectedUpload.analysisDetails && (
-                            <div>
-                              <p className="font-semibold mb-1 text-[#00d1c1]">Content Analysis Results:</p>
-                              <ul className="list-disc pl-5 text-[#00b8d4]">
-                                <li>{selectedUpload.analysisDetails.similarityPercentage}% similarity with content ID: {selectedUpload.analysisDetails.contentId}</li>
-                                {selectedUpload.analysisDetails.flaggedSection && (
-                                  <li>Flagged section: {selectedUpload.analysisDetails.flaggedSection}</li>
-                                )}
-                              </ul>
-                            </div>
-                          )}
+                          <p className="mb-2">
+                            <strong>Filename:</strong> {selectedUpload?.filename}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Description:</strong>{" "}
+                            {selectedUpload?.description || "N/A"}
+                          </p>
+                          <p className="mb-2">
+                            <strong>Fingerprint:</strong> {selectedUpload?.fingerprint}
+                          </p>
                         </div>
                       </DialogContent>
                     </Dialog>

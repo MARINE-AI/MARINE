@@ -8,7 +8,6 @@ from loguru import logger
 producer: AIOKafkaProducer = None
 
 async def ensure_topic(topic: str, num_partitions: int = 3, replication_factor: int = 1):
-    """Ensure that a Kafka topic exists, creating it if necessary."""
     admin_client = AIOKafkaAdminClient(bootstrap_servers=settings.kafka_bootstrap_servers)
     await admin_client.start()
     try:

@@ -1,5 +1,3 @@
-# marine-crawler/app/crawler.py
-
 import asyncio
 import json
 from urllib.parse import urljoin, urlparse, parse_qs
@@ -7,11 +5,6 @@ from aiohttp import ClientSession, ClientTimeout
 from bs4 import BeautifulSoup
 from app.kafka_client import get_kafka_producer
 from app.config import settings
-import sys
-import os
-
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'marine-analysis')))
-# from db import is_whitelisted, is_blacklisted
 from loguru import logger
 
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv", ".avi")
@@ -22,13 +15,6 @@ async def is_valid_video_url(url: str) -> bool:
     path = parsed.path.lower()
     query = parse_qs(parsed.query)
 
-    # if await is_whitelisted(netloc):
-    #     logger.info(f"Skipping whitelisted site: {netloc}")
-    #     return False
-
-    # if await is_blacklisted(netloc):
-    #     logger.info(f"Prioritizing blacklisted site: {netloc}")
-    #     return True
 
     if "youtube.com" in netloc:
         if "/watch" in path and "v" in query and query["v"]:
@@ -103,9 +89,6 @@ async def process_url(url: str, session: ClientSession):
     parsed_url = urlparse(url)
     netloc = parsed_url.netloc.lower()
 
-    if await is_whitelisted(netloc):
-        logger.info(f"Skipping whitelisted site: {netloc}")
-        return
 
     video_links = []
     if await is_valid_video_url(url):
@@ -124,7 +107,11 @@ async def process_url(url: str, session: ClientSession):
 
     producer = await get_kafka_producer()
     for video_url in video_links:
-        message = {"source_page": url, "video_url": video_url}
+        message = {
+            "source_page": url,
+            "video_url": video_url,
+            "analysis_type": "crawled"
+        }
         await producer.send_and_wait(
             topic=settings.kafka_video_download_topic,
             value=json.dumps(message).encode("utf-8")

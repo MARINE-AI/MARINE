@@ -1,6 +1,7 @@
 import os
 import subprocess
 import glob
+import math
 import asyncio
 from contextlib import asynccontextmanager
 
@@ -8,15 +9,47 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTa
 from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
 
-from fingerprint.video import extract_keyframes, compute_phashes, compute_video_similarity
+from fingerprint.video import extract_keyframes, compute_phashes
 from fingerprint.audio import extract_audio, generate_audio_fingerprint
-
 from storage.redis_utils import get_phashes, store_phashes
 from config import settings
-from db import async_session, UploadedVideo, CrawledVideo, init_db
+from db import async_session, Video, CrawledVideo, init_db
 from sqlalchemy import select, text
 from loguru import logger
 from broadcaster import broadcaster
+
+
+def hex_to_float_vector(hex_str: str) -> list:
+    vector = []
+    for ch in hex_str:
+        n = int(ch, 16)
+        bits = [(n >> i) & 1 for i in reversed(range(4))]
+        vector.extend([float(bit) for bit in bits])
+    return vector
+
+def average_hash_vector(hex_list: list) -> list:
+    if not hex_list:
+        return []
+    vectors = [hex_to_float_vector(h) for h in hex_list]
+    vector_length = len(vectors[0])
+    avg_vector = [0.0] * vector_length
+    for vec in vectors:
+        for i, val in enumerate(vec):
+            avg_vector[i] += val
+    count = len(vectors)
+    avg_vector = [x / count for x in avg_vector]
+    return avg_vector
+
+def cosine_similarity(vec1: list, vec2: list) -> float:
+    dot = sum(a * b for a, b in zip(vec1, vec2))
+    norm1 = math.sqrt(sum(a * a for a in vec1))
+    norm2 = math.sqrt(sum(b * b for b in vec2))
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    return (dot / (norm1 * norm2)) * 100.0
+
+def compute_video_similarity(uploaded_vector: list, reference_vector: list) -> float:
+    return cosine_similarity(uploaded_vector, reference_vector)
 
 def cleanup_files(file_list: list):
     for file_path in file_list:
@@ -58,63 +91,89 @@ async def sse(request: Request, user_email: str = Form(...)):
 @app.post("/match-video")
 async def match_video(
     video_file: UploadFile = File(...),
-    user_email: str = Form(...)
+    user_email: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(...)
 ):
     filename = video_file.filename
-    video_id = f"full_{filename}"
+    custom_video_id = f"full_{filename}"
     temp_path = f"temp_{filename}"
     with open(temp_path, "wb") as f:
         f.write(await video_file.read())
+
     pattern = os.path.join(settings.FRAMES_DIR, f"uploaded_{filename}_%d.jpg")
+    frames = None  # Initialize frames so we can clean up later
     try:
         frames = extract_keyframes(temp_path, pattern, fps=1)
         if not frames:
-            return JSONResponse(status_code=400, content={"error": "Failed to extract keyframes from uploaded video."})
-        phashes = compute_phashes(frames)
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Failed to extract keyframes from uploaded video."}
+            )
+        phash_hex_list = compute_phashes(frames)
+        avg_vector = average_hash_vector(phash_hex_list)
+
         audio_file = "temp_audio.wav"
         extracted_audio = extract_audio(temp_path, audio_file)
         audio_fp = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
 
-        match_results = await match_against_crawled(phashes, video_id)
+        match_results = await match_against_crawled(avg_vector, custom_video_id)
         flagged = True if match_results else False
 
+        if match_results:
+            aggregate_score = max(match["similarity"] for match in match_results)
+        else:
+            aggregate_score = 0.0
+
         async with async_session() as session:
-            existing = await session.get(UploadedVideo, video_id)
+            stmt = select(Video).where(Video.filename == custom_video_id)
+            result = await session.execute(stmt)
+            existing = result.scalar_one_or_none()
             if existing:
-                existing.match_score = 0.0
-                existing.uploaded_phashes = phashes
+                existing.hash_vector = avg_vector  # now a list of floats
                 existing.audio_spectrum = audio_fp
-                existing.flagged = flagged
+                existing.fingerprint = custom_video_id
                 existing.user_email = user_email
                 session.add(existing)
             else:
-                new_record = UploadedVideo(
-                    video_id=video_id,
-                    video_url="uploaded",
-                    match_score=0.0,
-                    uploaded_phashes=phashes,
-                    audio_spectrum=audio_fp,
-                    flagged=flagged,
-                    user_email=user_email
+                new_record = Video(
+                    user_email=user_email,
+                    filename=custom_video_id,
+                    title=name,
+                    description=description,
+                    fingerprint=custom_video_id,
+                    hash_vector=avg_vector,  # store the averaged vector
+                    audio_spectrum=audio_fp
                 )
                 session.add(new_record)
             await session.commit()
 
+        ai_response = {
+            "match_score": aggregate_score,
+            "computed_hash": custom_video_id,
+            "video_metadata": {
+                "title": name,
+                "description": description,
+                "user_email": user_email,
+                "active_matches": match_results,
+                "flagged": flagged
+            }
+        }
+
         status_message = f"Video '{filename}' processed. Flagged: {flagged}. Matches: {match_results}"
         await broadcaster.broadcast(user_email, status_message)
 
-        response = {
-            "video_id": video_id,
-            "flagged": flagged,
-            "active_matches": match_results
-        }
-        return JSONResponse(content=response)
+        return JSONResponse(content=ai_response)
     except Exception as e:
         logger.error(f"Error in /match-video: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error during video analysis.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error during video analysis."
+        )
     finally:
         cleanup_files([temp_path])
-        cleanup_files(frames)
+        if frames:
+            cleanup_files(frames)
 
 CHUNKS_DIR = os.path.join(os.getcwd(), "video_chunks")
 if not os.path.exists(CHUNKS_DIR):
@@ -162,7 +221,7 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
             f.write(f"file '{os.path.abspath(cf)}'\n")
     output_video = os.path.join(chunk_dir, f"{video_id}_reassembled.mp4")
     ffmpeg_cmd = [
-        "ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file,
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file,
         "-c", "copy", output_video
     ]
     try:
@@ -171,34 +230,34 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
         raise Exception(f"Failed to reassemble video: {e}")
     return output_video
 
-async def match_against_crawled(phashes, new_video_id):
+async def match_against_crawled(uploaded_vector: list, new_video_id: str):
     matches = []
     async with async_session() as session:
-        stmt = text("SELECT video_id, uploaded_phashes FROM crawled_videos")
+        stmt = text("SELECT video_url, hash_vector FROM crawled_videos")
         result = await session.execute(stmt)
         for row in result.fetchall():
-            crawled_id = row[0]
-            crawled_phashes = row[1]
-            similarity = compute_video_similarity(phashes, crawled_phashes)
+            crawled_video_id = row[0]
+            crawled_hash_vector = row[1]  # expected to be a list of floats from the DB
+            similarity = compute_video_similarity(uploaded_vector, crawled_hash_vector)
             if similarity >= settings.SIMILARITY_THRESHOLD:
-                matches.append({"crawled_video_id": crawled_id, "similarity": round(similarity, 2)})
+                matches.append({"crawled_video_id": crawled_video_id, "similarity": round(similarity, 2)})
     if matches:
         logger.info(f"match_against_crawled: Found match for {new_video_id}: {matches}")
     else:
         logger.info(f"match_against_crawled: No matches found for {new_video_id}.")
     return matches
 
-async def match_against_uploaded(phashes, new_video_id):
+async def match_against_uploaded(uploaded_vector: list, new_video_id: str):
     matches = []
     async with async_session() as session:
-        stmt = text("SELECT video_id, uploaded_phashes FROM uploaded_videos")
+        stmt = text("SELECT filename, hash_vector FROM videos")
         result = await session.execute(stmt)
         for row in result.fetchall():
-            uploaded_id = row[0]
-            uploaded_phashes = row[1]
-            similarity = compute_video_similarity(phashes, uploaded_phashes)
+            uploaded_video_id = row[0]
+            uploaded_hash_vector = row[1]  # expected to be a list of floats from the DB
+            similarity = compute_video_similarity(uploaded_vector, uploaded_hash_vector)
             if similarity >= settings.SIMILARITY_THRESHOLD:
-                matches.append({"uploaded_video_id": uploaded_id, "similarity": round(similarity, 2)})
+                matches.append({"uploaded_video_id": uploaded_video_id, "similarity": round(similarity, 2)})
     if matches:
         logger.info(f"match_against_uploaded: Found match for {new_video_id}: {matches}")
     else:
@@ -216,28 +275,26 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     if not frames:
         logger.error(f"Failed to extract keyframes from reassembled video {video_id}")
         return None
-    phashes = compute_phashes(frames)
-    # For crawled videos, compare fingerprints against uploaded (content owner) videos.
-    matches = await match_against_uploaded(phashes, video_id)
+    phash_hex_list = compute_phashes(frames)
+    avg_vector = average_hash_vector(phash_hex_list)
+    matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
 
     async with async_session() as session:
-        stmt = select(CrawledVideo).where(CrawledVideo.video_id == video_id)
+        stmt = select(CrawledVideo).where(CrawledVideo.video_url == video_id)
         result = await session.execute(stmt)
         existing = result.scalar_one_or_none()
         if existing:
-            existing.match_score = 0.0
-            existing.uploaded_phashes = phashes
-            existing.flagged = flagged
+            existing.hash_vector = avg_vector
             session.add(existing)
         else:
             new_record = CrawledVideo(
-                video_id=video_id,
-                video_url="reassembled",
-                match_score=0.0,
-                uploaded_phashes=phashes,
-                audio_spectrum=None,
-                flagged=flagged
+                video_url=video_id,
+                title="reassembled",
+                description="",
+                video_metadata=None,
+                hash_vector=avg_vector,
+                audio_spectrum=None
             )
             session.add(new_record)
         await session.commit()
@@ -247,14 +304,21 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
     except Exception:
         pass
     cleanup_files(frames)
-    result = {
+    if matches:
+        aggregate_score = max(match["similarity"] for match in matches)
+    else:
+        aggregate_score = 0.0
+
+    result_data = {
         "video_id": video_id,
-        "match_score": 0.0,
+        "match_score": aggregate_score,
         "active_matches": matches,
-        "uploaded_frames": len(phashes)
+        "uploaded_frames": len(phash_hex_list)
     }
-    logger.info(f"Automatic match processing for video_id {video_id} complete with match score {result['match_score']}. Active matches: {matches}")
-    return result
+    logger.info(
+        f"Automatic match processing for video_id {video_id} complete with match score {result_data['match_score']}. Active matches: {matches}"
+    )
+    return result_data
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

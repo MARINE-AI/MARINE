@@ -42,17 +42,11 @@ class URLRequest(BaseModel):
 
 @app.post("/submit")
 async def submit_url(request: URLRequest):
-    """
-    Submits a URL for crawling.
-    """
     url_list.append(request.url)
     return {"message": f"URL {request.url} submitted for crawling."}
 
 @app.get("/start_crawling")
 async def start_crawling():
-    """
-    Starts crawling for all submitted URLs.
-    """
     if not url_list:
         raise HTTPException(status_code=400, detail="No URLs submitted.")
     urls_to_crawl = url_list.copy()

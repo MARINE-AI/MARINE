@@ -2,10 +2,11 @@ package controllers
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"marine-backend/models"
 )
 
 type DashboardController struct {
@@ -18,69 +19,52 @@ func NewDashboardController(db *pgxpool.Pool) *DashboardController {
 	}
 }
 
-type UploadedVideo struct {
-	ID              int         `json:"id"`
-	VideoID         string      `json:"video_id"`
-	VideoURL        string      `json:"video_url"`
-	MatchScore      float64     `json:"match_score,omitempty"`
-	UploadedPhashes interface{} `json:"uploaded_phashes"`
-	AudioSpectrum   interface{} `json:"audio_spectrum,omitempty"`
-	Flagged         bool        `json:"flagged"`
-	UserEmail       string      `json:"user_email"`
-	UploadedBy      string      `json:"uploaded_by"`
-	CreatedAt       time.Time   `json:"created_at"`
-	Filename        string      `json:"filename"`
-	Description     string      `json:"description"`
-}
-
 func (dc *DashboardController) GetUserUploadedVideos(c *fiber.Ctx) error {
-	uploaderEmail := c.Query("user_email")
-	if uploaderEmail == "" {
+	encodedEmail := c.Params("user_email")
+	if encodedEmail == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Missing user_email query parameter",
+			"error": "Missing user_email route parameter",
 		})
 	}
-
+ 
 	rows, err := dc.DB.Query(context.Background(), `
 		SELECT 
-			id, video_id, video_url, match_score, uploaded_phashes, audio_spectrum, flagged, user_email, uploaded_by, created_at, filename, description
+			id, user_email, filename, title, description, fingerprint, 
+			hash_vector, audio_spectrum, created_at
 		FROM 
-			uploaded_videos
+			videos
 		WHERE 
-			uploaded_by = $1
-	`, uploaderEmail)
+			user_email = $1
+	`, encodedEmail)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Database query error",
+			"error": fmt.Sprintf("Database query error: %v", err),
 		})
 	}
 	defer rows.Close()
-
-	var videos []UploadedVideo
-
+ 
+	var videos []models.Video
+ 
 	for rows.Next() {
-		var video UploadedVideo
+		var video models.Video
 		err = rows.Scan(
 			&video.ID,
-			&video.VideoID,
-			&video.VideoURL,
-			&video.MatchScore,
-			&video.UploadedPhashes,
-			&video.AudioSpectrum,
-			&video.Flagged,
 			&video.UserEmail,
-			&video.UploadedBy,
-			&video.CreatedAt,
 			&video.Filename,
+			&video.Title,
 			&video.Description,
+			&video.Fingerprint,
+			&video.HashVector,
+			&video.AudioSpectrum,
+			&video.CreatedAt,
 		)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Error reading record",
+				"error": fmt.Sprintf("Error reading record: %v", err),
 			})
 		}
 		videos = append(videos, video)
 	}
-
+ 
 	return c.JSON(videos)
-}
+ }

@@ -36,6 +36,7 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 
 	videoName := c.FormValue("name")
 	videoDescription := c.FormValue("description")
+	userEmail := c.FormValue("user_email")
 
 	filePath := vc.VideoService.UploadsDir + "/" + fileHeader.Filename
 	log.Printf("[Upload] 📂 File will be saved to: %s", filePath)
@@ -45,31 +46,43 @@ func (vc *VideoController) Upload(c *fiber.Ctx) error {
 	}
 	log.Printf("[Upload] ✅ File saved successfully: %s", filePath)
 
-	videoID, fingerprint, err := vc.VideoService.SaveVideo(c, filePath, videoName, videoDescription)
+	videoID, fingerprint, err := vc.VideoService.SaveVideo(c, filePath, videoName, videoDescription, userEmail)
 	if err != nil {
 		log.Printf("[Upload] ❌ Error saving video: %v", err)
 		return c.Status(fiber.StatusInternalServerError).SendString("Error saving video: " + err.Error())
 	}
 	log.Printf("[Upload] ✅ Video saved successfully: videoID=%d, fingerprint=%s", videoID, fingerprint)
 
-	go func(videoID int, filePath, filename string) {
+	go func(videoID int, filePath, filename, userEmail, name, description string) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[AI] ❌ Recovered from panic: %v", r)
+			}
+		}()
+
 		log.Printf("[AI] ⏳ Starting AI processing for videoID=%d, filePath=%s", videoID, filePath)
-		aiResp, err := vc.AIServiceClient.ProcessVideo(filePath)
+		aiResp, err := vc.AIServiceClient.ProcessVideo(filePath, userEmail, name, description)
 		if err != nil {
 			log.Printf("[AI] ❌ Error processing video with AI: %v", err)
 			return
 		}
-		log.Printf("[AI] ✅ Analysis complete: videoID=%d, match_score=%.2f, ai_hash=%s, metadata=%v",
-			videoID, aiResp.MatchScore, aiResp.ComputedHash, aiResp.Metadata)
+		log.Printf("[AI] ✅ Analysis complete: videoID=%d, match_score=%.2f, ai_hash=%s, video_metadata=%v",
+			videoID, aiResp.MatchScore, aiResp.ComputedHash, aiResp.VideoMetadata)
 
 		threshold := 85.0
 		if aiResp.MatchScore >= threshold {
 			piracyURL := "https://example.com/pirated/" + filename
 			log.Printf("[AI] 🚨 Piracy detected! VideoID=%d, Match Score=%.2f, URL: %s", videoID, aiResp.MatchScore, piracyURL)
 		}
-	}(videoID, filePath, fileHeader.Filename)
+	}(videoID, filePath, fileHeader.Filename, userEmail, videoName, videoDescription)
 
 	go func(videoID int, filePath, filename, name, description string) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Discovery] ❌ Recovered from panic: %v", r)
+			}
+		}()
+
 		discoveryURL := "http://localhost:8002/discover"
 
 		file, err := os.Open(filePath)

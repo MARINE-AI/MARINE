@@ -3,10 +3,15 @@ package models
 import "time"
 
 type Video struct {
-	ID          int       `json:"id"`
-	Filename    string    `json:"filename"`
-	Fingerprint string    `json:"fingerprint"`
-	UploadedAt  time.Time `json:"uploaded_at"`
+    ID            int         `json:"id"`
+    UserEmail     string      `json:"user_email"`
+    Filename      string      `json:"filename"`
+    Title         string      `json:"title,omitempty"`
+    Description   string      `json:"description,omitempty"`
+    Fingerprint   string      `json:"fingerprint,omitempty"`
+    HashVector    []byte      `json:"hash_vector,omitempty"`    
+    AudioSpectrum []byte      `json:"audio_spectrum,omitempty"` 
+    CreatedAt     time.Time   `json:"created_at"`
 }
 
 type PiracyCase struct {
