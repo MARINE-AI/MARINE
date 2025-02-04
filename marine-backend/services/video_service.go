@@ -21,23 +21,23 @@ func NewVideoService(db *pgxpool.Pool, uploadsDir string) *VideoService {
 	return &VideoService{DB: db, UploadsDir: uploadsDir}
 }
 
-func (vs *VideoService) SaveVideo(c *fiber.Ctx, filePath string) (int, string, error) {
-	filename := filepath.Base(filePath)
+func (vs *VideoService) SaveVideo(c *fiber.Ctx, filePath, name, description string) (int, string, error) {
+    filename := filepath.Base(filePath)
 
-	fingerprint, err := generateMD5(filePath)
-	if err != nil {
-		return 0, "", err
-	}
+    fingerprint, err := generateMD5(filePath)
+    if err != nil {
+        return 0, "", err
+    }
 
-	var videoID int
-	err = vs.DB.QueryRow(context.Background(),
-		"INSERT INTO videos (filename, fingerprint) VALUES ($1, $2) RETURNING id",
-		filename, fingerprint).Scan(&videoID)
-	if err != nil {
-		return 0, "", err
-	}
+    var videoID int
+    err = vs.DB.QueryRow(context.Background(),
+        "INSERT INTO uploaded_videos (filename, fingerprint, description) VALUES ($1, $2, $3) RETURNING id",
+        filename, fingerprint, description).Scan(&videoID)
+    if err != nil {
+        return 0, "", err
+    }
 
-	return videoID, fingerprint, nil
+    return videoID, fingerprint, nil
 }
 
 func generateMD5(filePath string) (string, error) {

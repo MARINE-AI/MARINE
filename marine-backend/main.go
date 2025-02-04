@@ -7,14 +7,13 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/joho/godotenv"
 	"marine-backend/config"
 	"marine-backend/controllers"
 	"marine-backend/eventhandlers"
 	"marine-backend/services"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-
 )
 
 func main() {
@@ -49,6 +48,7 @@ func main() {
 
 	videoController := controllers.NewVideoController(videoService, aiClient)
 	reportController := controllers.NewReportController(db)
+	dashboardController := controllers.NewDashboardController(db)
 
 	kafkaHandler := eventhandlers.NewKafkaHandler([]string{config.KafkaBroker}, "piracy_links", "marine-ai", db)
 	go kafkaHandler.Start()
@@ -57,14 +57,15 @@ func main() {
 		BodyLimit: 100 * 1024 * 1024,
 	})
 
-    app.Use(cors.New(cors.Config{
-        AllowOrigins: "http://localhost:3000",
-        AllowMethods: "POST, GET, OPTIONS",
-        AllowHeaders: "Content-Type",
-    }))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:3000",
+		AllowMethods: "POST, GET, OPTIONS",
+		AllowHeaders: "Content-Type",
+	}))
 
 	app.Post("/upload", videoController.Upload)
 	app.Get("/reports", reportController.GetReports)
+	app.Get("/dashboard/videos", dashboardController.GetUserUploadedVideos)
 
 	port := ":8080"
 	fmt.Printf("🚀 Server running on http://localhost%s\n", port)
@@ -72,22 +73,46 @@ func main() {
 }
 
 func createTables(db *pgxpool.Pool) error {
-	createVideosTable := `
-	CREATE TABLE IF NOT EXISTS videos (
+	createUploadedVideosTable := `
+	CREATE TABLE IF NOT EXISTS uploaded_videos (
 		id SERIAL PRIMARY KEY,
-		filename TEXT NOT NULL,
-		fingerprint TEXT NOT NULL,
-		uploaded_at TIMESTAMPTZ DEFAULT NOW()
+		video_id TEXT UNIQUE,
+		video_url TEXT,
+		match_score REAL,
+		uploaded_phashes JSON,
+		audio_spectrum JSON,
+		flagged BOOLEAN DEFAULT FALSE,
+		user_email TEXT,
+		uploaded_by TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		filename TEXT,
+		description TEXT
 	);`
-	_, err := db.Exec(context.Background(), createVideosTable)
+	_, err := db.Exec(context.Background(), createUploadedVideosTable)
 	if err != nil {
-		return fmt.Errorf("error creating videos table: %w", err)
+		return fmt.Errorf("error creating uploaded_videos table: %w", err)
+	}
+
+	createCrawledVideosTable := `
+	CREATE TABLE IF NOT EXISTS crawled_videos (
+		id SERIAL PRIMARY KEY,
+		video_id TEXT UNIQUE,
+		video_url TEXT,
+		match_score REAL,
+		uploaded_phashes JSON,
+		audio_spectrum JSON,
+		flagged BOOLEAN DEFAULT FALSE,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);`
+	_, err = db.Exec(context.Background(), createCrawledVideosTable)
+	if err != nil {
+		return fmt.Errorf("error creating crawled_videos table: %w", err)
 	}
 
 	createPiracyTable := `
 	CREATE TABLE IF NOT EXISTS piracy_cases (
 		id SERIAL PRIMARY KEY,
-		video_id INTEGER REFERENCES videos(id),
+		uploaded_video_id INTEGER REFERENCES uploaded_videos(id),
 		piracy_url TEXT NOT NULL,
 		match_score REAL NOT NULL,
 		detected_at TIMESTAMPTZ DEFAULT NOW()

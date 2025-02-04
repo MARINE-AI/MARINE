@@ -10,8 +10,8 @@ from app.config import settings
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'marine-analysis')))
-from db import is_whitelisted, is_blacklisted
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'marine-analysis')))
+# from db import is_whitelisted, is_blacklisted
 from loguru import logger
 
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv", ".avi")
@@ -22,13 +22,13 @@ async def is_valid_video_url(url: str) -> bool:
     path = parsed.path.lower()
     query = parse_qs(parsed.query)
 
-    if await is_whitelisted(netloc):
-        logger.info(f"Skipping whitelisted site: {netloc}")
-        return False
+    # if await is_whitelisted(netloc):
+    #     logger.info(f"Skipping whitelisted site: {netloc}")
+    #     return False
 
-    if await is_blacklisted(netloc):
-        logger.info(f"Prioritizing blacklisted site: {netloc}")
-        return True
+    # if await is_blacklisted(netloc):
+    #     logger.info(f"Prioritizing blacklisted site: {netloc}")
+    #     return True
 
     if "youtube.com" in netloc:
         if "/watch" in path and "v" in query and query["v"]:
