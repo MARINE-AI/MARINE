@@ -1,7 +1,7 @@
 "use client";
 
-import SessionProviderWrapper from "@/app/components/session-provider-wrapper";
-import AuthWrapper from "@/app/components/auth-wrapper";
+import SessionProviderWrapper from "@/components/session-provider-wrapper";
+import AuthWrapper from "@/components/auth-wrapper";
 import Sidebar from "../components/sidebar";
 
 export default function DashboardLayout({
