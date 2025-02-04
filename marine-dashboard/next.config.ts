@@ -1,5 +1,6 @@
-// next.config.js
-module.exports = {
+import { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
   async headers() {
     return [
       {
@@ -13,6 +14,11 @@ module.exports = {
       }
     ];
   },
-  // Add asset prefix if using absolute URLs
-  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://your-domain.com' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://marine-ai.vercel.app' : '',
+
+  distDir: '.next',
+
+  output: 'standalone',
 };
+
+export default nextConfig;
