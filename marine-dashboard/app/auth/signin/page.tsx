@@ -2,8 +2,8 @@
 
 import { signIn, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/app/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/app/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { ChromeIcon } from "lucide-react"
 import { useEffect } from "react"
 
