@@ -22,6 +22,9 @@ from broadcaster import broadcaster
 # --- Helper Functions ---
 
 def hex_to_float_vector(hex_str: str) -> list:
+    """
+    Convert a hex string to a list of floats (each hex digit becomes 4 bits).
+    """
     vector = []
     for ch in hex_str:
         n = int(ch, 16)
@@ -29,12 +32,32 @@ def hex_to_float_vector(hex_str: str) -> list:
         vector.extend([float(bit) for bit in bits])
     return vector
 
-def average_hash_vector(hex_list: list) -> list:
+def fix_vector_dimension(vector: list, target_dim: int = 128) -> list:
+    """
+    Ensure that a vector has exactly `target_dim` elements.
+    If it is shorter, pad with 0.0. If longer, truncate.
+    """
+    if len(vector) < target_dim:
+        return vector + [0.0] * (target_dim - len(vector))
+    elif len(vector) > target_dim:
+        return vector[:target_dim]
+    return vector
+
+def average_hash_vector(hex_list: list, target_dim: int = 128) -> list:
+    """
+    Compute the average vector from a list of hex strings.
+    First, each hex string is converted to a float vector.
+    Then, each vector is adjusted to have `target_dim` dimensions.
+    Finally, the average (element-wise) is computed.
+    """
     if not hex_list:
-        return []
+        return [0.0] * target_dim
+    # Convert each hex string to a vector.
     vectors = [hex_to_float_vector(h) for h in hex_list]
-    vector_length = len(vectors[0])
-    avg_vector = [0.0] * vector_length
+    # Adjust each vector to the target dimension.
+    vectors = [fix_vector_dimension(vec, target_dim) for vec in vectors]
+    # Initialize the average vector.
+    avg_vector = [0.0] * target_dim
     for vec in vectors:
         for i, val in enumerate(vec):
             avg_vector[i] += val
@@ -135,12 +158,14 @@ async def match_video(
             )
         phash_hex_list = compute_phashes(frames)
         avg_vector = average_hash_vector(phash_hex_list)
+        # Ensure the vector has exactly 128 dimensions
+        avg_vector = fix_vector_dimension(avg_vector, 128)
 
         audio_file = "temp_audio.wav"
         extracted_audio = extract_audio(temp_path, audio_file)
         audio_fp = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
 
-        # Updated: match against crawled videos (modified to retrieve id)
+        # Match against crawled videos (modified to retrieve id)
         match_results = await match_against_crawled(avg_vector, custom_video_id)
         flagged = True if match_results else False
         if match_results:
@@ -352,6 +377,8 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
 
     phash_hex_list = compute_phashes(frames)
     avg_vector = average_hash_vector(phash_hex_list)
+    # Ensure the vector has exactly 128 dimensions
+    avg_vector = fix_vector_dimension(avg_vector, 128)
 
     matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
