@@ -37,7 +37,7 @@ class Video(Base):
     title = Column(String)                                # Video title provided by the user
     description = Column(String)                          # Video description provided by the user
     fingerprint = Column(String)                          # Optional: MD5 or other fingerprint of the video file
-    hash_vector = Column(Vector(64))                      # Vector representation of the video hash
+    hash_vector = Column(Vector(128))                      # Vector representation of the video hash
     audio_spectrum = Column(Vector(128))                  # Vector representation of the audio spectrum
     created_at = Column(DateTime, server_default=func.now())  # Timestamp when the video was uploaded
 
@@ -52,7 +52,7 @@ class CrawledVideo(Base):
     title = Column(String)                                # Title from the source (if available)
     description = Column(String)                          # Description from the source (if available)
     video_metadata = Column(JSON)                         # Additional metadata as JSON (renamed from "metadata")
-    hash_vector = Column(Vector(64))                      # Vector representation of the crawled video's hash
+    hash_vector = Column(Vector(128))                      # Vector representation of the crawled video's hash
     audio_spectrum = Column(Vector(128))                  # Vector representation of the crawled video's audio spectrum
     crawled_at = Column(DateTime, server_default=func.now())  # Timestamp when the video was crawled
 
@@ -80,7 +80,7 @@ class AnalyzedVideo(Base):
     analysis_type = Column(String, nullable=False)
     uploaded_video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
     crawled_video_id = Column(Integer, ForeignKey("crawled_videos.id"), nullable=True)
-    phash_vector = Column(Vector(64))               # Vector representation of the computed perceptual hash (pHash)
+    phash_vector = Column(Vector(128))               # Vector representation of the computed perceptual hash (pHash)
     analysis_result = Column(JSON)                  # Detailed analysis result (e.g., similarity scores, matching details)
     match_score = Column(Float)                     # Computed match score (if applicable)
     flagged = Column(Boolean, default=False)        # Flag indicating issues (e.g., potential piracy)
