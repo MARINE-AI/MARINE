@@ -22,7 +22,7 @@ os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GRPC_TRACE"] = ""
 
 # todo: replace with config.py implementation
-genai.configure(api_key="AIzaSyDhgn_kEp1gHyizJvmGlMWOGnq56aAhGjU")
+genai.configure(api_key="")
 
 app = FastAPI()
 
