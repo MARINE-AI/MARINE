@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gofiber/fiber/v2"
 	"marine-backend/services"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type VideoController struct {

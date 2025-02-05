@@ -2,7 +2,8 @@ import os
 import subprocess
 import json
 import tempfile
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
 import google.generativeai as genai
 
 # Suppress gRPC logging messages (set before any library is imported)
@@ -12,12 +13,12 @@ os.environ["GRPC_TRACE"] = ""
 # Configure the API key (Ensure you have set up your Google AI credentials)
 genai.configure(api_key="AIzaSyDhgn_kEp1gHyizJvmGlMWOGnq56aAhGjU")
 
-app = Flask(__name__)
+app = FastAPI()
 
 def extract_keyframes(video_path: str, output_dir: str, frame_interval: int = 30) -> list:
     """
     Uses FFmpeg to extract keyframes from the provided video at the specified interval.
-    
+
     :param video_path: Path to the video file.
     :param output_dir: Directory where keyframes will be stored.
     :param frame_interval: The interval between frames to extract.
@@ -63,7 +64,7 @@ def analyze_image_for_dork(image_path: str, description: str) -> list:
     """
     Uploads an image (keyframe) and generates a JSON array containing Google dork queries.
     The output is strictly a JSON array of query strings.
-    
+
     :param image_path: Path to the image file.
     :param description: Additional context for refining the AI's analysis.
     :return: A list of Google dork query strings.
@@ -71,10 +72,10 @@ def analyze_image_for_dork(image_path: str, description: str) -> list:
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    # Upload the image file
+    # Upload the image file to the Gemini API
     myfile = genai.upload_file(image_path)
 
-    # Prompt instructs the model to return only a JSON array of query strings
+    # Instruct the model to return only a JSON array of query strings
     prompt = f"""
 You are an advanced image analysis engine. Your task is to analyze the provided image (a keyframe extracted from a video)
 and deduce the context, theme, and visual cues that could be used to locate related content on the web.
@@ -107,39 +108,34 @@ Return only the JSON array.
 
     return output_array
 
-@app.route("/discover", methods=["POST"])
-def discover():
+@app.post("/discover")
+async def discover(
+    file: UploadFile = File(...),
+    name: str = Form(""),
+    description: str = Form("")
+):
     """
     The /discover endpoint accepts a multipart POST request with the following fields:
       - file: the video file
-      - name: the video's name
-      - description: additional context/description for analysis
+      - name: the video's name (optional)
+      - description: additional context/description for analysis (optional)
+
     It extracts keyframes from the video, sends each keyframe to the Gemini API for analysis,
     and returns a JSON array of unique Google dork queries.
     """
-    # Validate that the file exists in the request
-    if "file" not in request.files:
-        return jsonify({"error": "No file part in request"}), 400
-
-    file = request.files["file"]
-    name = request.form.get("name", "")
-    description = request.form.get("description", "")
-
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-
-    # Save the video file to a temporary directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = os.path.join(tmpdir, file.filename)
-        file.save(video_path)
-        keyframes_output_dir = os.path.join(tmpdir, "keyframes")
-        
-        try:
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = os.path.join(tmpdir, file.filename)
+            contents = await file.read()
+            with open(video_path, "wb") as f:
+                f.write(contents)
+            keyframes_output_dir = os.path.join(tmpdir, "keyframes")
+            
             # Extract keyframes from the video
             keyframe_paths = extract_keyframes(video_path, keyframes_output_dir, frame_interval=30)
             all_dork_queries = []
 
-            # Send each extracted keyframe to the Gemini API for analysis
+            # Analyze each keyframe using the Gemini API
             for keyframe in keyframe_paths:
                 queries = analyze_image_for_dork(keyframe, description)
                 all_dork_queries.extend(queries)
@@ -147,11 +143,24 @@ def discover():
             # Remove duplicate queries if any
             unique_dork_queries = list(set(all_dork_queries))
             
-            # Return strictly the JSON array of Google dork queries
-            return jsonify(unique_dork_queries)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            return unique_dork_queries
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Global list to store submitted URLs
+url_list = []
+
+class URLRequest(BaseModel):
+    url: str
+
+@app.post("/submit")
+async def submit_url(request: URLRequest):
+    """
+    The /submit endpoint receives a URL and adds it to the global url_list.
+    """
+    url_list.append(request.url)
+    return {"message": f"URL {request.url} submitted for crawling."}
 
 if __name__ == "__main__":
-    # Run the Flask app on port 8002
-    app.run(port=8002)
+    import uvicorn
+    uvicorn.run("discovery-logic:app", host="0.0.0.0", port=8002, reload=True)
