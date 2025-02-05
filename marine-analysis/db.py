@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from pgvector.sqlalchemy import Vector
 
+# Get the DATABASE_URL from the environment or use the default
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     DATABASE_URL = "postgresql+asyncpg://ish:forzajuve!2@4.240.103.202:5432/marine"
@@ -37,13 +38,11 @@ class Video(Base):
     title = Column(String)                                # Video title provided by the user
     description = Column(String)                          # Video description provided by the user
     fingerprint = Column(String)                          # Optional: MD5 or other fingerprint of the video file
-    hash_vector = Column(Vector(128))                      # Vector representation of the video hash
-    audio_spectrum = Column(Vector(128))                  # Vector representation of the audio spectrum
+    hash_vector = Column(Vector(128))                     # 128-dimensional vector representation of the video hash
+    audio_spectrum = Column(Vector(128))                  # 128-dimensional vector representation of the audio spectrum
     created_at = Column(DateTime, server_default=func.now())  # Timestamp when the video was uploaded
 
-
 # Table: crawled_videos (Videos obtained from external sources)
-
 class CrawledVideo(Base):
     __tablename__ = "crawled_videos"
 
@@ -52,8 +51,8 @@ class CrawledVideo(Base):
     title = Column(String)                                # Title from the source (if available)
     description = Column(String)                          # Description from the source (if available)
     video_metadata = Column(JSON)                         # Additional metadata as JSON (renamed from "metadata")
-    hash_vector = Column(Vector(128))                      # Vector representation of the crawled video's hash
-    audio_spectrum = Column(Vector(128))                  # Vector representation of the crawled video's audio spectrum
+    hash_vector = Column(Vector(128))                     # 128-dimensional vector representation of the crawled video's hash
+    audio_spectrum = Column(Vector(128))                  # 128-dimensional vector representation of the crawled video's audio spectrum
     crawled_at = Column(DateTime, server_default=func.now())  # Timestamp when the video was crawled
 
 # Table: analyzed_videos
@@ -64,7 +63,7 @@ class CrawledVideo(Base):
 #   - A comparative analysis between an uploaded and a crawled video (analysis_type = 'comparison')
 #
 # It includes:
-#   - phash_vector: A pgvector column for storing the computed perceptual hash (pHash)
+#   - phash_vector: A pgvector column for storing the computed perceptual hash (pHash) as a 128-dimensional vector.
 #   - analysis_result: A JSON column for detailed analysis results (e.g. similarity scores)
 #   - match_score: A float representing the computed aggregate match score
 #   - flagged: A boolean indicating if the video is problematic (e.g. potential piracy)
@@ -72,7 +71,6 @@ class CrawledVideo(Base):
 # Two check constraints enforce:
 #   1. analysis_type is one of ('uploaded', 'crawled', 'comparison').
 #   2. Based on analysis_type, the appropriate foreign key(s) are provided.
-
 class AnalyzedVideo(Base):
     __tablename__ = "analyzed_videos"
 
@@ -80,10 +78,10 @@ class AnalyzedVideo(Base):
     analysis_type = Column(String, nullable=False)
     uploaded_video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
     crawled_video_id = Column(Integer, ForeignKey("crawled_videos.id"), nullable=True)
-    phash_vector = Column(Vector(128))               # Vector representation of the computed perceptual hash (pHash)
-    analysis_result = Column(JSON)                  # Detailed analysis result (e.g., similarity scores, matching details)
-    match_score = Column(Float)                     # Computed match score (if applicable)
-    flagged = Column(Boolean, default=False)        # Flag indicating issues (e.g., potential piracy)
+    phash_vector = Column(Vector(128))               # 128-dimensional vector representation of the computed perceptual hash (pHash)
+    analysis_result = Column(JSON)                   # Detailed analysis result (e.g., similarity scores, matching details)
+    match_score = Column(Float)                      # Computed match score (if applicable)
+    flagged = Column(Boolean, default=False)         # Flag indicating issues (e.g., potential piracy)
     analyzed_at = Column(DateTime, server_default=func.now())  # Timestamp when the analysis was performed
 
     __table_args__ = (
@@ -99,7 +97,6 @@ class AnalyzedVideo(Base):
     )
 
 # Initialize the database by creating all tables.
-
 async def init_db():
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
