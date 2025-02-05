@@ -315,7 +315,11 @@ if not os.path.exists(CHUNKS_DIR):
 
 # --- Background Task Scheduling for Processing Video Chunks ---
 def schedule_process_chunks_and_match(video_id: str, total_chunks: int):
-    asyncio.create_task(process_chunks_and_match(video_id, total_chunks))
+    """
+    In a background thread, there is no running event loop so we use asyncio.run
+    to execute the async process_chunks_and_match coroutine.
+    """
+    asyncio.run(process_chunks_and_match(video_id, total_chunks))
 
 @app.post("/upload-video-chunk")
 async def upload_video_chunk(

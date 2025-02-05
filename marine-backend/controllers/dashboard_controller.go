@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"net/url"
 
+	"marine-backend/models"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"marine-backend/models"
 )
 
 // DashboardController handles dashboard-related endpoints.
@@ -23,7 +24,6 @@ func NewDashboardController(db *pgxpool.Pool) *DashboardController {
 	}
 }
 
-// GetUserUploadedVideos retrieves all videos uploaded by the given user.
 func (dc *DashboardController) GetUserUploadedVideos(c *fiber.Ctx) error {
 	encodedEmail := c.Params("user_email")
 	if encodedEmail == "" {
@@ -32,15 +32,26 @@ func (dc *DashboardController) GetUserUploadedVideos(c *fiber.Ctx) error {
 		})
 	}
 
-	rows, err := dc.DB.Query(context.Background(), `
+	query := `
 		SELECT 
-			id, user_email, filename, title, description, fingerprint, 
-			hash_vector, audio_spectrum, created_at
+			v.id, 
+			v.user_email, 
+			v.filename, 
+			v.title, 
+			v.description, 
+			v.fingerprint, 
+			v.hash_vector, 
+			v.audio_spectrum, 
+			v.created_at,
+			COALESCE(av.flagged, false) AS flagged
 		FROM 
-			videos
+			videos v
+		LEFT JOIN 
+			analyzed_videos av ON v.id = av.video_id
 		WHERE 
-			user_email = $1
-	`, encodedEmail)
+			v.user_email = $1
+	`
+	rows, err := dc.DB.Query(context.Background(), query, encodedEmail)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": fmt.Sprintf("Database query error: %v", err),
@@ -52,6 +63,7 @@ func (dc *DashboardController) GetUserUploadedVideos(c *fiber.Ctx) error {
 
 	for rows.Next() {
 		var video models.Video
+
 		err = rows.Scan(
 			&video.ID,
 			&video.UserEmail,
@@ -62,12 +74,14 @@ func (dc *DashboardController) GetUserUploadedVideos(c *fiber.Ctx) error {
 			&video.HashVector,
 			&video.AudioSpectrum,
 			&video.CreatedAt,
+			&video.Flagged,
 		)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": fmt.Sprintf("Error reading record: %v", err),
 			})
 		}
+
 		videos = append(videos, video)
 	}
 
@@ -114,7 +128,6 @@ func (dc *DashboardController) RelaySSE(c *fiber.Ctx) error {
 		})
 	}
 
-	// Set appropriate SSE headers and stream the response body.
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
