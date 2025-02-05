@@ -18,13 +18,11 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import httpx
 
-
 os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GRPC_TRACE"] = ""
 
 # todo: replace with config.py implementation
 genai.configure(api_key="AIzaSyDhgn_kEp1gHyizJvmGlMWOGnq56aAhGjU")
-
 
 app = FastAPI()
 
@@ -274,7 +272,7 @@ async def periodic_start_crawling():
         try:
             async with httpx.AsyncClient() as client:
                 print("[Cron] Hitting start_crawling endpoint")
-                response = await client.post("http://localhost:8001/start_crawling")
+                response = await client.get("http://localhost:8001/start_crawling")
                 if response.status_code == 200:
                     print("[Cron] start_crawling triggered successfully")
                 else:
@@ -282,7 +280,6 @@ async def periodic_start_crawling():
         except Exception as e:
             print(f"[Cron] Error triggering start_crawling: {str(e)}")
         await asyncio.sleep(300)  # Wait for 5 minutes
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -292,13 +289,11 @@ async def startup_event():
     asyncio.create_task(batch_submit_worker())
     asyncio.create_task(periodic_start_crawling())
 
-
 def run_server():
     """
     Runs the FastAPI server using uvicorn.
     """
     uvicorn.run(app, host="0.0.0.0", port=8002)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
