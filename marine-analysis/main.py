@@ -32,7 +32,7 @@ def hex_to_float_vector(hex_str: str) -> list:
         vector.extend([float(bit) for bit in bits])
     return vector
 
-def fix_vector_dimension(vector: list, target_dim: int = 64) -> list:
+def fix_vector_dimension(vector: list, target_dim: int = 128) -> list:
     """
     Ensure that a vector has exactly `target_dim` elements.
     If it is shorter, pad with 0.0. If longer, truncate.
@@ -43,7 +43,7 @@ def fix_vector_dimension(vector: list, target_dim: int = 64) -> list:
         return vector[:target_dim]
     return vector
 
-def average_hash_vector(hex_list: list, target_dim: int = 64) -> list:
+def average_hash_vector(hex_list: list, target_dim: int = 128) -> list:
     """
     Compute the average vector from a list of hex strings.
     First, each hex string is converted to a float vector.
@@ -157,10 +157,10 @@ async def match_video(
                 content={"error": "Failed to extract keyframes from uploaded video."}
             )
         phash_hex_list = compute_phashes(frames)
-        # Compute average hash vector using target_dim 64
-        avg_vector = average_hash_vector(phash_hex_list, target_dim=64)
-        # Ensure the vector has exactly 64 dimensions
-        avg_vector = fix_vector_dimension(avg_vector, 64)
+        # Compute average hash vector using target_dim 128
+        avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
+        # Ensure the vector has exactly 128 dimensions
+        avg_vector = fix_vector_dimension(avg_vector, 128)
 
         audio_file = "temp_audio.wav"
         extracted_audio = extract_audio(temp_path, audio_file)
@@ -377,8 +377,9 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
         return None
 
     phash_hex_list = compute_phashes(frames)
-    avg_vector = average_hash_vector(phash_hex_list, target_dim=64)
-    avg_vector = fix_vector_dimension(avg_vector, 64)
+    # Compute average hash vector using target_dim 128
+    avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
+    avg_vector = fix_vector_dimension(avg_vector, 128)
 
     matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
