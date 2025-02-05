@@ -18,18 +18,17 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import httpx
 
-# ------------------------- Setup & Configuration -------------------------
 
-# Suppress gRPC logging messages
 os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GRPC_TRACE"] = ""
 
-# Configure the Google Generative AI API key
+# todo: replace with config.py implementation
 genai.configure(api_key="AIzaSyDhgn_kEp1gHyizJvmGlMWOGnq56aAhGjU")
 
-# ------------------------- FastAPI Server Definition -------------------------
 
 app = FastAPI()
+
+url_queue = asyncio.Queue()
 
 def extract_keyframes(video_path: str, output_dir: str, frame_interval: int = 30) -> list:
     """
@@ -38,7 +37,6 @@ def extract_keyframes(video_path: str, output_dir: str, frame_interval: int = 30
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
-    # FFmpeg command to extract frames every `frame_interval` frames
     command = [
         "ffmpeg",
         "-i", video_path,
@@ -84,7 +82,7 @@ def analyze_image_for_dork(image_path: str, description: str) -> list:
 You are an advanced image analysis engine. Your task is to analyze the provided image (a keyframe extracted from a video)
 and deduce the context, theme, and visual cues that could be used to locate related content on the web.
 Based on your analysis, generate Google dork queries using specific keywords and search operators (such as site:, intext:, intitle:, etc.).
-If it's a popular vidoe, you can also use the title of the video to generate dork queries.
+If it's a popular video, you can also use the title of the video to generate dork queries.
 
 Instructions:
 1. Analyze the image and extract key visual and contextual elements.
@@ -111,7 +109,6 @@ Return only the JSON array.
 
     return output_array
 
-# Global list to store submitted URLs (for demo purposes)
 url_list = []
 
 class URLRequest(BaseModel):
@@ -150,28 +147,22 @@ async def discover(
                 f.write(contents)
             keyframes_output_dir = os.path.join(tmpdir, "keyframes")
             
-            # Extract keyframes from the video
             keyframe_paths = extract_keyframes(video_path, keyframes_output_dir, frame_interval=30)
             all_dork_queries = []
             
-            # Analyze each keyframe
             for keyframe in keyframe_paths:
                 queries = analyze_image_for_dork(keyframe, description)
                 all_dork_queries.extend(queries)
             
-            # Remove duplicate queries
             unique_dork_queries = list(set(all_dork_queries))
             
-            # Schedule background dorking (search & URL submission) using the queries we just obtained.
             background_tasks.add_task(run_dorking_from_queries, unique_dork_queries)
             
             return unique_dork_queries
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ------------------------- Dorking Workflow Functions -------------------------
 
-# Custom HTTP headers for Playwright
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 }
@@ -230,7 +221,7 @@ async def submit_url_to_server(url: str):
 
 async def run_dorking_from_queries(queries: list):
     """
-    Given a list of dork queries, search DuckDuckGo for each query and submit found URLs.
+    Given a list of dork queries, search DuckDuckGo for each query and add found URLs to the batch submission queue.
     This function is meant to run as a background task.
     """
     if not queries:
@@ -245,12 +236,62 @@ async def run_dorking_from_queries(queries: list):
         if urls:
             for url in urls:
                 print(f" - {url}")
-                await submit_url_to_server(url)
+                await url_queue.put(url)
         else:
             print("⚠ No results found for this query.")
         print("-" * 50)
 
-# ------------------------- Server Runner -------------------------
+async def batch_submit_worker():
+    """
+    Periodically checks the URL queue and submits URLs in batches.
+    Submits every 10 URLs or flushes remaining URLs if they've been waiting for over 30 seconds.
+    """
+    last_flush_time = time.time()
+    while True:
+        await asyncio.sleep(5)  # Check every 5 seconds
+        if url_queue.qsize() >= 10:
+            batch = []
+            for _ in range(10):
+                batch.append(url_queue.get_nowait())
+            last_flush_time = time.time()
+            print(f"[Batch Submit] Submitting batch of 10 URLs")
+            tasks = [submit_url_to_server(url) for url in batch]
+            await asyncio.gather(*tasks)
+        elif not url_queue.empty() and (time.time() - last_flush_time) >= 30:
+            batch = []
+            while not url_queue.empty():
+                batch.append(url_queue.get_nowait())
+            last_flush_time = time.time()
+            print(f"[Batch Submit] Submitting batch of {len(batch)} URLs (flushed after waiting)")
+            tasks = [submit_url_to_server(url) for url in batch]
+            await asyncio.gather(*tasks)
+
+async def periodic_start_crawling():
+    """
+    Periodically triggers the start_crawling endpoint every 5 minutes.
+    """
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                print("[Cron] Hitting start_crawling endpoint")
+                response = await client.post("http://localhost:8001/start_crawling")
+                if response.status_code == 200:
+                    print("[Cron] start_crawling triggered successfully")
+                else:
+                    print(f"[Cron] Failed to trigger start_crawling. Status: {response.status_code}")
+        except Exception as e:
+            print(f"[Cron] Error triggering start_crawling: {str(e)}")
+        await asyncio.sleep(300)  # Wait for 5 minutes
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Launch background tasks for batch URL submission and periodic start_crawling.
+    """
+    asyncio.create_task(batch_submit_worker())
+    asyncio.create_task(periodic_start_crawling())
+
 
 def run_server():
     """
@@ -258,7 +299,6 @@ def run_server():
     """
     uvicorn.run(app, host="0.0.0.0", port=8002)
 
-# ------------------------- Main Execution -------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -271,15 +311,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.video:
-        # Start the server in a background thread
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
 
-        # Wait a few seconds to ensure the server has started
         time.sleep(3)
 
-        # Run the integrated pipeline by posting the video to /discover.
-        # (This simulates an external client sending a video.)
         async def run_client_pipeline():
             async with httpx.AsyncClient() as client:
                 with open(args.video, "rb") as f:
@@ -291,5 +327,4 @@ if __name__ == "__main__":
                     print(f"[Client] Received {len(queries)} queries from /discover endpoint.")
         asyncio.run(run_client_pipeline())
     else:
-        # Run only the server; no video was provided
         run_server()
