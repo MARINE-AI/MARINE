@@ -6,6 +6,7 @@ import json
 import asyncio
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException, BackgroundTasks, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
@@ -19,79 +20,124 @@ from sqlalchemy import select, text
 from loguru import logger
 from broadcaster import broadcaster
 
-# --- Helper Functions ---
+# === Helper Functions ===
 
 def hex_to_float_vector(hex_str: str) -> list:
     """
-    Convert a hex string to a list of floats (each hex digit becomes 4 bits).
-    For example, if hex_str is 'a3f', it converts each character into a list of 4 bits.
+    Convert a hex string to a normalized 128-dimensional vector.
+    Each hex character is converted to 4 bits, then the vector is padded/truncated to 128 dimensions.
     """
-    vector = []
+    # Initialize a zero vector of 128 dimensions
+    vector = np.zeros(128)
+    
+    if not hex_str:
+        return vector.tolist()
+        
+    # Convert each hex character to 4 bits
+    bit_array = []
     for ch in hex_str:
         n = int(ch, 16)
-        # Each hex digit is converted to 4 bits (0 or 1)
         bits = [(n >> i) & 1 for i in reversed(range(4))]
-        vector.extend([float(bit) for bit in bits])
-    return vector
+        bit_array.extend(bits)
+    
+    # Convert bits to float values and normalize
+    float_array = np.array(bit_array, dtype=float)
+    
+    # Ensure we have exactly 128 dimensions through padding or truncation
+    if len(float_array) < 128:
+        vector[:len(float_array)] = float_array
+    else:
+        vector = float_array[:128]
+    
+    # Normalize the vector
+    norm = np.linalg.norm(vector)
+    if norm > 0:
+        vector = vector / norm
+        
+    return vector.tolist()
 
-def fix_vector_dimension(vector: list, target_dim: int = 128) -> list:
+def average_hash_vector(hex_list: list) -> list:
     """
-    Ensure that a vector has exactly `target_dim` elements.
-    If it is shorter, pad with 0.0. If longer, truncate.
-    """
-    if len(vector) < target_dim:
-        return vector + [0.0] * (target_dim - len(vector))
-    elif len(vector) > target_dim:
-        return vector[:target_dim]
-    return vector
-
-def average_hash_vector(hex_list: list, target_dim: int = 128) -> list:
-    """
-    Compute the average vector from a list of hex strings.
-    Each hex string is converted to a float vector, then adjusted to have `target_dim` dimensions.
-    Finally, the average (element-wise) is computed.
+    Compute the average 128-dimensional normalized vector from a list of hex strings.
     """
     if not hex_list:
-        return [0.0] * target_dim
-    # Convert each hex string to a vector.
+        return np.zeros(128).tolist()
+    
+    # Convert each hex string to a 128-dimensional vector
     vectors = [hex_to_float_vector(h) for h in hex_list]
-    # Adjust each vector to the target dimension.
-    vectors = [fix_vector_dimension(vec, target_dim) for vec in vectors]
-    # Initialize the average vector.
-    avg_vector = [0.0] * target_dim
-    for vec in vectors:
-        for i, val in enumerate(vec):
-            avg_vector[i] += val
-    count = len(vectors)
-    avg_vector = [x / count for x in avg_vector]
-    return avg_vector
+    
+    # Stack vectors and compute mean
+    stacked = np.stack(vectors)
+    avg_vector = np.mean(stacked, axis=0)
+    
+    # Normalize the average vector
+    norm = np.linalg.norm(avg_vector)
+    if norm > 0:
+        avg_vector = avg_vector / norm
+        
+    return avg_vector.tolist()
 
 def parse_db_vector(db_value):
+    """
+    Parse vector from database, ensuring it's a 128-dimensional normalized vector.
+    """
     if db_value is None:
-        return None
-    if isinstance(db_value, list):
-        return db_value
-    if isinstance(db_value, str):
-        try:
-            return json.loads(db_value)
-        except Exception as e:
-            logger.error(f"Failed to parse DB vector as JSON: {e}")
-            return None
-    return None
+        return np.zeros(128).tolist()
+        
+    try:
+        if isinstance(db_value, str):
+            vector = json.loads(db_value)
+        else:
+            vector = db_value
+            
+        # Convert to numpy array for processing
+        vector = np.array(vector)
+        
+        # Ensure 128 dimensions: pad with zeros or truncate
+        if len(vector) < 128:
+            padded = np.zeros(128)
+            padded[:len(vector)] = vector
+            vector = padded
+        elif len(vector) > 128:
+            vector = vector[:128]
+            
+        # Normalize
+        norm = np.linalg.norm(vector)
+        if norm > 0:
+            vector = vector / norm
+            
+        return vector.tolist()
+        
+    except Exception as e:
+        logger.error(f"Failed to parse DB vector: {e}")
+        return np.zeros(128).tolist()
 
 def cosine_similarity(vec1: list, vec2: list) -> float:
-    if not vec1 or not vec2:
-        return 0.0
+    """
+    Compute cosine similarity between two vectors, ensuring they're properly formatted.
+    Returns similarity as a percentage.
+    """
     try:
-        dot = sum(a * b for a, b in zip(vec1, vec2))
+        v1 = np.array(vec1)
+        v2 = np.array(vec2)
+        
+        # Ensure both vectors are 128-dimensional
+        if len(v1) != 128 or len(v2) != 128:
+            v1 = np.array(parse_db_vector(v1))
+            v2 = np.array(parse_db_vector(v2))
+            
+        dot = np.dot(v1, v2)
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+            
+        return (dot / (norm1 * norm2)) * 100.0
+        
     except Exception as e:
-        logger.error(f"Error computing dot product: {e}")
+        logger.error(f"Error computing similarity: {e}")
         return 0.0
-    norm1 = math.sqrt(sum(a * a for a in vec1))
-    norm2 = math.sqrt(sum(b * b for b in vec2))
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    return (dot / (norm1 * norm2)) * 100.0
 
 def compute_video_similarity(uploaded_vector: list, reference_vector: list) -> float:
     return cosine_similarity(uploaded_vector, reference_vector)
@@ -114,6 +160,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
     logger.info("Shutdown complete.")
 
+# === FastAPI App ===
 app = FastAPI(lifespan=lifespan, title="Video AI Microservice")
 
 # --- SSE Endpoint ---
@@ -151,40 +198,39 @@ async def match_video(
     pattern = os.path.join(settings.FRAMES_DIR, f"uploaded_{filename}_%d.jpg")
     frames = None
     try:
+        # Extract keyframes from the uploaded video
         frames = extract_keyframes(temp_path, pattern, fps=1)
         if not frames:
             return JSONResponse(
                 status_code=400,
                 content={"error": "Failed to extract keyframes from uploaded video."}
             )
+        # Compute perceptual hashes for the extracted frames
         phash_hex_list = compute_phashes(frames)
-        # Compute average hash vector using target_dim 128 (to match DB expectations)
-        avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
-        # Ensure the vector has exactly 128 dimensions
-        avg_vector = fix_vector_dimension(avg_vector, 128)
+        avg_vector = average_hash_vector(phash_hex_list)
 
         # Extract audio fingerprint
         audio_file = "temp_audio.wav"
         try:
             extracted_audio = extract_audio(temp_path, audio_file)
+            audio_fp = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
+            if audio_fp:
+                audio_fp = parse_db_vector(audio_fp)  # Ensure 128 dimensions
         except Exception as e:
             logger.error(f"Error extracting audio: {e}")
-            extracted_audio = None
-        audio_fp = generate_audio_fingerprint(extracted_audio) if extracted_audio else None
+            audio_fp = None
 
-        # Match against crawled videos (modified to retrieve id)
+        # Match against crawled videos
         match_results = await match_against_crawled(avg_vector, custom_video_id)
         flagged = True if match_results else False
-        if match_results:
-            aggregate_score = max(match["similarity"] for match in match_results)
-        else:
-            aggregate_score = 0.0
+        aggregate_score = max((match["similarity"] for match in match_results), default=0.0)
 
-        # Save the uploaded video in the "videos" table
+        # Save the uploaded video record
         async with async_session() as session:
             stmt = select(Video).where(Video.filename == custom_video_id)
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
+            
             if existing:
                 existing.hash_vector = avg_vector
                 existing.audio_spectrum = audio_fp
@@ -205,13 +251,11 @@ async def match_video(
                     audio_spectrum=audio_fp
                 )
                 session.add(new_record)
-                await session.commit()  # commit to get an ID
+                await session.commit()
                 await session.refresh(new_record)
                 video_record = new_record
 
-            await session.commit()
-
-            # Insert analysis record for the uploaded video (analysis_type "uploaded")
+            # Create analysis record for the uploaded video
             analysis = AnalyzedVideo(
                 analysis_type="uploaded",
                 uploaded_video_id=video_record.id,
@@ -222,7 +266,7 @@ async def match_video(
             )
             session.add(analysis)
 
-            # For each match from crawled videos, create a "comparison" record
+            # Create comparison records for each match
             for match in match_results:
                 comparison = AnalyzedVideo(
                     analysis_type="comparison",
@@ -234,6 +278,7 @@ async def match_video(
                     flagged=flagged
                 )
                 session.add(comparison)
+            
             await session.commit()
 
         ai_response = {
@@ -256,7 +301,7 @@ async def match_video(
         logger.error(f"Error in /match-video: {e}")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error during video analysis."
+            detail=f"Internal server error during video analysis: {str(e)}"
         )
     finally:
         cleanup_files([temp_path])
@@ -268,9 +313,7 @@ CHUNKS_DIR = os.path.join(os.getcwd(), "video_chunks")
 if not os.path.exists(CHUNKS_DIR):
     os.makedirs(CHUNKS_DIR)
 
-# --- Background Task for Processing Video Chunks ---
-# IMPORTANT: BackgroundTasks in FastAPI expect synchronous callables.
-# Since process_chunks_and_match is async, we wrap it in a sync function.
+# --- Background Task Scheduling for Processing Video Chunks ---
 def schedule_process_chunks_and_match(video_id: str, total_chunks: int):
     asyncio.create_task(process_chunks_and_match(video_id, total_chunks))
 
@@ -290,7 +333,7 @@ async def upload_video_chunk(
         f.write(await video_chunk.read())
     existing_chunks = glob.glob(os.path.join(chunk_dir, "chunk_*.mp4"))
     if len(existing_chunks) == total_chunks:
-        # Schedule the async processing function via the sync wrapper.
+        # Schedule processing when all chunks have been uploaded.
         background_tasks.add_task(schedule_process_chunks_and_match, video_id, total_chunks)
     return JSONResponse({"message": f"Chunk {chunk_index} for video {video_id} uploaded successfully."})
 
@@ -302,6 +345,9 @@ async def analyze(video_id: str = Form(...), total_chunks: int = Form(...)):
     return JSONResponse(content=result)
 
 def reassemble_video(video_id: str, total_chunks: int) -> str:
+    """
+    Reassemble video chunks into a single video file using ffmpeg.
+    """
     chunk_dir = os.path.join(CHUNKS_DIR, video_id)
     if not os.path.exists(chunk_dir):
         raise Exception("No chunks found for this video_id.")
@@ -311,10 +357,12 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
     )
     if len(chunk_files) != total_chunks:
         raise Exception(f"Expected {total_chunks} chunks, but found {len(chunk_files)}.")
+    
     list_file = os.path.join(chunk_dir, "chunks.txt")
     with open(list_file, "w") as f:
         for cf in chunk_files:
             f.write(f"file '{os.path.abspath(cf)}'\n")
+    
     output_video = os.path.join(chunk_dir, f"{video_id}_reassembled.mp4")
     ffmpeg_cmd = [
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file,
@@ -326,16 +374,15 @@ def reassemble_video(video_id: str, total_chunks: int) -> str:
         raise Exception(f"Failed to reassemble video: {e}")
     return output_video
 
-# --- Matching Helper Functions (Modified to include the id field) ---
+# --- Matching Helper Functions ---
 async def match_against_crawled(uploaded_vector: list, new_video_id: str):
     matches = []
     async with async_session() as session:
-        # Now fetching id, video_url and hash_vector
+        # Fetch id, video_url, and hash_vector from crawled_videos
         stmt = text("SELECT id, video_url, hash_vector FROM crawled_videos")
         result = await session.execute(stmt)
         for row in result.fetchall():
             crawled_video_id = row[0]
-            # row[1] is video_url (if needed) and row[2] is hash_vector
             crawled_hash_vector = parse_db_vector(row[2])
             if not crawled_hash_vector:
                 continue
@@ -375,7 +422,7 @@ async def match_against_uploaded(uploaded_vector: list, new_video_id: str):
         logger.info(f"match_against_uploaded: No matches found for {new_video_id}.")
     return matches
 
-# --- Process Chunks, Analyze and Save Crawled Video and Comparison Analysis ---
+# --- Process Chunks, Analyze, and Save Crawled Video and Comparison Analysis ---
 async def process_chunks_and_match(video_id: str, total_chunks: int):
     try:
         reassembled = reassemble_video(video_id, total_chunks)
@@ -390,16 +437,12 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
         return None
 
     phash_hex_list = compute_phashes(frames)
-    # Compute average hash vector using target_dim 128 (to match DB expectations)
-    avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
-    avg_vector = fix_vector_dimension(avg_vector, 128)
+    avg_vector = average_hash_vector(phash_hex_list)
 
+    # For chunked (crawled) videos, match against previously uploaded videos.
     matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
-    if matches:
-        aggregate_score = max(match["similarity"] for match in matches)
-    else:
-        aggregate_score = 0.0
+    aggregate_score = max((match["similarity"] for match in matches), default=0.0)
 
     async with async_session() as session:
         stmt = select(CrawledVideo).where(CrawledVideo.video_url == video_id)
