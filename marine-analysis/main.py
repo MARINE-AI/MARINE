@@ -262,13 +262,19 @@ CHUNKS_DIR = os.path.join(os.getcwd(), "video_chunks")
 if not os.path.exists(CHUNKS_DIR):
     os.makedirs(CHUNKS_DIR)
 
+# ---
+# IMPORTANT: BackgroundTasks in FastAPI expect synchronous callables.
+# Since process_chunks_and_match is async, we wrap it in a sync function.
+def schedule_process_chunks_and_match(video_id: str, total_chunks: int):
+    asyncio.create_task(process_chunks_and_match(video_id, total_chunks))
+
 @app.post("/upload-video-chunk")
 async def upload_video_chunk(
     background_tasks: BackgroundTasks,
     video_id: str = Form(...),
     chunk_index: int = Form(...),
     total_chunks: int = Form(...),
-    video_chunk: UploadFile = File(...)
+    video_chunk: UploadFile = File(...),
 ):
     chunk_dir = os.path.join(CHUNKS_DIR, video_id)
     if not os.path.exists(chunk_dir):
@@ -278,7 +284,8 @@ async def upload_video_chunk(
         f.write(await video_chunk.read())
     existing_chunks = glob.glob(os.path.join(chunk_dir, "chunk_*.mp4"))
     if len(existing_chunks) == total_chunks:
-        background_tasks.add_task(process_chunks_and_match, video_id, total_chunks)
+        # Schedule the async processing function via the sync wrapper.
+        background_tasks.add_task(schedule_process_chunks_and_match, video_id, total_chunks)
     return JSONResponse({"message": f"Chunk {chunk_index} for video {video_id} uploaded successfully."})
 
 @app.post("/analyze")
