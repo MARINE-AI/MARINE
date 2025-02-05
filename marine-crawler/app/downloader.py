@@ -58,7 +58,11 @@ async def process_video_task(message_value: bytes):
             logger.info(f"Created downloads directory: {downloads_dir}")
 
         video_template = os.path.join(downloads_dir, f"{video_id}.%(ext)s")
-        yt_dlp_cmd = f"yt-dlp -f best -o {shell_quote(video_template)} {shell_quote(video_url)}"
+
+        cookies_file = os.path.join(os.getcwd(), "cookies.json")
+        cookies_arg = f"--cookies {shell_quote(cookies_file)}" if os.path.exists(cookies_file) else ""
+
+        yt_dlp_cmd = f"yt-dlp {cookies_arg} -f best -o {shell_quote(video_template)} {shell_quote(video_url)}"
         logger.info(f"Running yt-dlp command: {yt_dlp_cmd}")
         proc = await run_command(yt_dlp_cmd)
         stdout, stderr = await proc.communicate()
