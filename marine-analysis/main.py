@@ -24,15 +24,17 @@ from broadcaster import broadcaster
 def hex_to_float_vector(hex_str: str) -> list:
     """
     Convert a hex string to a list of floats (each hex digit becomes 4 bits).
+    For example, if hex_str is 'a3f', it converts each character into a list of 4 bits.
     """
     vector = []
     for ch in hex_str:
         n = int(ch, 16)
+        # Each hex digit is converted to 4 bits (0 or 1)
         bits = [(n >> i) & 1 for i in reversed(range(4))]
         vector.extend([float(bit) for bit in bits])
     return vector
 
-def fix_vector_dimension(vector: list, target_dim: int = 64) -> list:
+def fix_vector_dimension(vector: list, target_dim: int = 128) -> list:
     """
     Ensure that a vector has exactly `target_dim` elements.
     If it is shorter, pad with 0.0. If longer, truncate.
@@ -43,11 +45,10 @@ def fix_vector_dimension(vector: list, target_dim: int = 64) -> list:
         return vector[:target_dim]
     return vector
 
-def average_hash_vector(hex_list: list, target_dim: int = 64) -> list:
+def average_hash_vector(hex_list: list, target_dim: int = 128) -> list:
     """
     Compute the average vector from a list of hex strings.
-    First, each hex string is converted to a float vector.
-    Then, each vector is adjusted to have `target_dim` dimensions.
+    Each hex string is converted to a float vector, then adjusted to have `target_dim` dimensions.
     Finally, the average (element-wise) is computed.
     """
     if not hex_list:
@@ -157,10 +158,10 @@ async def match_video(
                 content={"error": "Failed to extract keyframes from uploaded video."}
             )
         phash_hex_list = compute_phashes(frames)
-        # Compute average hash vector using target_dim 64 (to match db Vector(64))
-        avg_vector = average_hash_vector(phash_hex_list, target_dim=64)
-        # Ensure the vector has exactly 64 dimensions
-        avg_vector = fix_vector_dimension(avg_vector, 64)
+        # Compute average hash vector using target_dim 128 (to match DB expectations)
+        avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
+        # Ensure the vector has exactly 128 dimensions
+        avg_vector = fix_vector_dimension(avg_vector, 128)
 
         # Extract audio fingerprint
         audio_file = "temp_audio.wav"
@@ -267,7 +268,7 @@ CHUNKS_DIR = os.path.join(os.getcwd(), "video_chunks")
 if not os.path.exists(CHUNKS_DIR):
     os.makedirs(CHUNKS_DIR)
 
-# ---
+# --- Background Task for Processing Video Chunks ---
 # IMPORTANT: BackgroundTasks in FastAPI expect synchronous callables.
 # Since process_chunks_and_match is async, we wrap it in a sync function.
 def schedule_process_chunks_and_match(video_id: str, total_chunks: int):
@@ -389,9 +390,9 @@ async def process_chunks_and_match(video_id: str, total_chunks: int):
         return None
 
     phash_hex_list = compute_phashes(frames)
-    # Compute average hash vector using target_dim 64 (to match db Vector(64))
-    avg_vector = average_hash_vector(phash_hex_list, target_dim=64)
-    avg_vector = fix_vector_dimension(avg_vector, 64)
+    # Compute average hash vector using target_dim 128 (to match DB expectations)
+    avg_vector = average_hash_vector(phash_hex_list, target_dim=128)
+    avg_vector = fix_vector_dimension(avg_vector, 128)
 
     matches = await match_against_uploaded(avg_vector, video_id)
     flagged = True if matches else False
