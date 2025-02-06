@@ -1,5 +1,5 @@
 <p align="center">
-  <h3 align="center">Marine</h3>
+  <h3 align="center">MARINE</h3>
   <p align="center">
     A distributed microservices system for detecting pirated video content. Marine integrates several microservices for video analysis, crawling, and discovery.
     <br /><br />
@@ -28,7 +28,7 @@
 
 ## About
 
-Marine is a distributed system designed to help content owners detect pirated video content across the web. It consists of several specialized microservices that work together to:
+MARINE is a distributed system designed to help content owners detect pirated video content across the web. It consists of several specialized microservices that work together to:
 
 - Analyze videos using advanced fingerprinting techniques.
 - Crawl websites to download and segment video content.
