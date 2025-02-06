@@ -21,7 +21,6 @@
     <li><a href="#database-schema">Database Schema</a></li>
     <li><a href="#microservices-overview">Microservices Overview</a></li>
     <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
   </ol>
 </details>
 
